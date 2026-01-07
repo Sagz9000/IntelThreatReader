@@ -604,21 +604,22 @@ def chat():
     
     # Use Multimodal Model if images are available
     model_to_use = VISION_MODEL if retrieved_media else LLM_MODEL
+    llm_vision = Ollama(model=model_to_use, base_url=OLLAMA_BASE_URL)
     
     try:
         prompt_text = (
-            f"You are a Senior Cyber Threat Intelligence Analyst.\n"
+            f"You are a Senior Cyber Threat Intelligence Analyst. You are professional, precise, and data-driven.\n"
             f"Current Page Context: {page_awareness}\n\n"
             f"Knowledge Base Context:\n{context_str}\n\n"
             f"Question: {query}\n\n"
             f"Instructions:\n"
             f"1. Acknowledge the user's current view if relevant.\n"
-            f"2. Provide a structured, professional response suitable for a CISO or SOC Manager.\n"
-            f"3. Use Markdown headers (##) for sections like 'Executive Summary', 'Key Takeaways', and 'Analysis'.\n"
-            f"4. Use bullet points for facts and takeaways.\n"
-            f"5. Provide clickable Markdown links [Title](URL) for all referenced articles.\n"
-            f"6. Do NOT defang URLs if they are reputable news sources.\n"
-            f"7. If IOCs are present (IPs, hashes, domains), append a JSON block:\n"
+            f"2. ANALYTICAL RIGOR: For specific technical or threat-related queries, base all responses strictly on the provided 'Knowledge Base Context'. If the data contains statistics (e.g., volume, frequency, percentages), lead with these facts. For general conversation or greetings, respond naturally in your professional persona.\n"
+            f"3. STRUCTURE: Use Markdown headers (##) for 'Executive Summary', 'Statistical Analysis', and 'Recommendations' when providing intelligence reports.\n"
+            f"4. CITATION: Use bullet points for facts. Every claim must be supported by a data point from the context. Provide clickable Markdown links [Title](URL) for all referenced sources.\n"
+            f"5. NO HALLUCINATION: If a specific statistic or data point is missing, do not estimate. State that the data is unavailable.\n"
+            f"6. FORMATTING: Do NOT defang URLs from reputable news sources.\n"
+            f"7. IOC EXTRACTION: If IOCs (IPs, hashes, domains) are present, append a JSON block:\n"
             f"```json\n{{\"iocs\": [\"ioc1\", \"ioc2\"]}}\n```\n"
             f"Assistant:"
         )
