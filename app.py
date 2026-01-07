@@ -606,21 +606,20 @@ def chat():
     model_to_use = VISION_MODEL if retrieved_media else LLM_MODEL
     
     try:
-        # For LangChain Ollama, images can be passed in the invoke call as base64 or used in a multimodal prompt
-        # Note: LangChain's Ollama implementation supports 'images' parameter
-        llm_vision = Ollama(model=model_to_use, base_url=OLLAMA_BASE_URL)
-        
         prompt_text = (
-            f"You are an expert Threat Intelligence Analyst.\n"
+            f"You are a Senior Cyber Threat Intelligence Analyst.\n"
             f"Current Page Context: {page_awareness}\n\n"
             f"Knowledge Base Context:\n{context_str}\n\n"
             f"Question: {query}\n\n"
-            f"Rules:\n"
-            f"1. Acknowledge what the user is currently looking at if relevant.\n"
-            f"2. Provide clickable Markdown links [Title](URL) for articles mentioned.\n"
-            f"3. Do NOT defang URLs if they are reputable news sources.\n"
-            f"4. If IOCs are present, append a JSON block:\n"
-            f"```json\n{{\"iocs\": [\"ioc1\"]}}\n```\n"
+            f"Instructions:\n"
+            f"1. Acknowledge the user's current view if relevant.\n"
+            f"2. Provide a structured, professional response suitable for a CISO or SOC Manager.\n"
+            f"3. Use Markdown headers (##) for sections like 'Executive Summary', 'Key Takeaways', and 'Analysis'.\n"
+            f"4. Use bullet points for facts and takeaways.\n"
+            f"5. Provide clickable Markdown links [Title](URL) for all referenced articles.\n"
+            f"6. Do NOT defang URLs if they are reputable news sources.\n"
+            f"7. If IOCs are present (IPs, hashes, domains), append a JSON block:\n"
+            f"```json\n{{\"iocs\": [\"ioc1\", \"ioc2\"]}}\n```\n"
             f"Assistant:"
         )
         
