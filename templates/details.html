@@ -21,6 +21,8 @@
                 <a href="{{ url_for('visuals_page') }}" style="color: #ccc; text-decoration: none;">Visuals</a>
             </nav>
             <div style="display: flex; gap: 10px;">
+                <button class="icon-btn" onclick="reScrape('{{ article.id }}', this)" title="Re-Scrape from Source"><i
+                        class="fas fa-sync"></i> Re-Scrape</button>
                 <button class="icon-btn" onclick="reAnalyze('{{ article.id }}', this)" title="Re-Analyze with AI"><i
                         class="fas fa-brain"></i> Re-Analyze</button>
             </div>
@@ -109,6 +111,28 @@
                 window.location.href = '/story-feed';
             } else {
                 window.location.href = '/';
+            }
+        }
+
+        async function reScrape(id, btn) {
+            if (!confirm("Re-scrape this article from source? This will overwrite current content.")) return;
+            btn = btn || event.target.closest('button');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const res = await fetch(`/api/articles/${id}/rescrape`, { method: 'POST' });
+                if (res.ok) {
+                    alert("Article re-scraped successfully! Reloading...");
+                    window.location.reload();
+                } else {
+                    const data = await res.json();
+                    alert("Failed: " + (data.error || "Unknown error"));
+                    btn.innerHTML = originalContent;
+                }
+            } catch (e) {
+                alert("Error: " + e);
+                btn.innerHTML = originalContent;
             }
         }
 

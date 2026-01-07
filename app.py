@@ -173,6 +173,11 @@ def scrape_article_content(url):
         
         # BleepingComputer specific selector
         article_body = soup.find('div', class_='articleBody')
+        
+        # The Hacker News specific selector
+        if not article_body:
+            article_body = soup.find('div', id='articlebody')
+            
         if not article_body:
             article_body = soup.find('article') or soup.find('main')
             
@@ -195,6 +200,15 @@ def scrape_article_content(url):
             text = article_body.get_text(separator='\n')
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             text_content = '\n'.join(lines)
+            
+        # Fallback to meta description if content is empty or very short
+        if not text_content or len(text_content) < 200:
+            logger.info("Content short/empty, falling back to meta description")
+            meta_desc = soup.find('meta', property='og:description') or soup.find('meta', attrs={'name': 'description'})
+            if meta_desc:
+                desc_text = meta_desc.get('content', '').strip()
+                if desc_text:
+                    text_content = f"SUMMARY (Content behind JS/Login): {desc_text}\n\n" + text_content
             
         return text_content, json.dumps(media_urls)
     except Exception as e:
@@ -653,6 +667,38 @@ try:
     init_db()
 except Exception as e:
     logger.error(f"DB Init failed: {e}")
+
+@app.route('/api/articles/<article_id>/rescrape', methods=['POST'])
+def rescrape_article(article_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    row = c.execute("SELECT link FROM articles WHERE id = ?", (article_id,)).fetchone()
+    
+    if not row:
+        conn.close()
+        return jsonify({"error": "Article not found"}), 404
+        
+    link = row['link']
+    logger.info(f"Re-scraping article {article_id} from {link}")
+    
+    try:
+        # Re-use scrape_article_content
+        full_content, media_json = scrape_article_content(link)
+        
+        # Update DB and reset analysis
+        c.execute("""
+            UPDATE articles 
+            SET content = ?, media = ?, analyzed = 0, ai_summary = 'Pending Re-Analysis...', ai_risk_level = 'Unknown' 
+            WHERE id = ?
+        """, (full_content, media_json, article_id))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.close()
+        logger.error(f"Re-scrape failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/articles/<article_id>/analyze', methods=['POST'])
 def reanalyze_article(article_id):
