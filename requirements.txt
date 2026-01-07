@@ -1,0 +1,13 @@
+Flask
+feedparser
+langchain
+langchain-community
+langchain-ollama
+chromadb
+ollama
+python-dotenv
+requests
+beautifulsoup4
+lxml
+langchain-chroma
+APScheduler

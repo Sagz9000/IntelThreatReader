@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intel Threat Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 10px 20px 20px 20px;">
+            <h1 style="margin:0;"><i class="fas fa-shield-alt"></i> Intel Threat Reader</h1>
+            <nav style="display: flex; gap: 20px;">
+                <a href="{{ url_for('index') }}"
+                    style="color: var(--accent-color); text-decoration: none; font-weight: bold;">Dashboard</a>
+                <a href="{{ url_for('story_feed') }}" style="color: #ccc; text-decoration: none;">Listing</a>
+                <a href="{{ url_for('visuals_page') }}" style="color: #ccc; text-decoration: none;">Visuals</a>
+            </nav>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; margin-bottom: 2rem;">
+            <div id="queueStatus"
+                style="display:none; background:rgba(10, 132, 255, 0.2); padding: 8px 15px; border-radius: 20px; color: #0a84ff; font-size: 0.9em; align-items: center; border: 1px solid rgba(10, 132, 255, 0.3);">
+            </div>
+            <div id="loading" class="loader"></div>
+            <button onclick="refreshFeeds()"><i class="fas fa-sync"></i> Refresh Feeds</button>
+            <button onclick="openFeedModal()" style="background: #444; margin-left: 0.5rem;"><i class="fas fa-cog"></i>
+                Manage Feeds</button>
+        </div>
+    </header>
+
+    <div class="container">
+        {% if not latest and not categories %}
+        <div style="text-align: center; margin-top: 4rem;">
+            <h2>No Intelligence Data Found</h2>
+            <p>Click "Refresh Feeds" to fetch the latest threat reports.</p>
+        </div>
+        {% endif %}
+
+        {% if latest %}
+        <h2 class="section-title">Latest & Unclassified</h2>
+        <div class="grid">
+            {% for article in latest %}
+            <div class="card">
+                <h3><a href="{{ url_for('details', article_id=article.id) }}">{{ article.title }}</a></h3>
+                <div class="meta">{{ article.published }}</div>
+                <div class="summary">
+                    {% if article.analyzed %}
+                    {{ article.ai_summary }}
+                    {% else %}
+                    <span style="color:#0a84ff; font-style: italic;"><i class="fas fa-spinner fa-spin"></i> Analysis in
+                        progress...</span>
+                    {% endif %}
+                </div>
+                <div class="tags">
+                    {% if article.analyzed %}
+                    <span class="tag risk-{{ article.ai_risk_level }}">{{ article.ai_risk_level }} Risk</span>
+                    <span class="tag">{{ article.ai_category }}</span>
+                    {% else %}
+                    <span class="tag" style="background:#333; color:#aaa;">Pending</span>
+                    {% endif %}
+                    {% if article.source %}
+                    <span class="tag source-tag"><i class="fas fa-rss"></i> {{ article.source }}</span>
+                    {% endif %}
+
+                    <!-- User Tags -->
+                    <div id="tags-{{ article.id }}" style="display:contents">
+                        {% if article.user_tags %}
+                        {% for tag in article.user_tags | from_json %}
+                        <span class="tag user-tag" onclick="removeTag('{{ article.id }}', '{{ tag }}')"
+                            title="Click to remove">{{ tag }} &times;</span>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    <button class="icon-btn" onclick="addTag('{{ article.id }}')" style="padding: 0 4px;">+</button>
+                    <div class="card-actions"
+                        style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; padding-top: 10px; display: flex; justify-content: flex-end;">
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}', this)"
+                            title="Re-Analyze with AI"><i class="fas fa-brain"></i></button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% for category, articles in categories.items() %}
+        <h2 class="section-title">{{ category }}</h2>
+        <div class="grid">
+            {% for article in articles %}
+            <div class="card">
+                <h3><a href="{{ url_for('details', article_id=article.id) }}">{{ article.title }}</a></h3>
+                <div class="meta">{{ article.published }}</div>
+                <div class="summary">{{ article.ai_summary }}</div>
+                <div class="tags">
+                    <span class="tag risk-{{ article.ai_risk_level }}">{{ article.ai_risk_level }} Risk</span>
+                    {% if article.source %}
+                    <span class="tag source-tag"><i class="fas fa-rss"></i> {{ article.source }}</span>
+                    {% endif %}
+
+                    <!-- User Tags -->
+                    <div id="tags-{{ article.id }}" style="display:contents">
+                        {% if article.user_tags %}
+                        {% for tag in article.user_tags | from_json %}
+                        <span class="tag user-tag" onclick="removeTag('{{ article.id }}', '{{ tag }}')"
+                            title="Click to remove">{{ tag }} &times;</span>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    <button class="icon-btn" onclick="addTag('{{ article.id }}')" style="padding: 0 4px;">+</button>
+                    <div class="card-actions"
+                        style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; padding-top: 10px; display: flex; justify-content: flex-end;">
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}', this)"
+                            title="Re-Analyze with AI"><i class="fas fa-brain"></i></button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Feed Management Modal -->
+    <div id="feedModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeFeedModal()">&times;</span>
+            <div class="chat-header">Manage RSS Feeds</div>
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                <input type="text" id="newFeedName" placeholder="Feed Name"
+                    style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <input type="text" id="newFeedUrl" placeholder="RSS URL"
+                    style="flex: 2; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <button onclick="addFeed()"
+                    style="padding: 8px 16px; background: #00ce08; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+            </div>
+            <div id="feedList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Feeds will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Feed Management Modal -->
+    <div id="feedModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeFeedModal()">&times;</span>
+            <div class="chat-header">Manage RSS Feeds</div>
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                <input type="text" id="newFeedName" placeholder="Feed Name"
+                    style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <input type="text" id="newFeedUrl" placeholder="RSS URL"
+                    style="flex: 2; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <button onclick="addFeed()"
+                    style="padding: 8px 16px; background: #00ce08; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+            </div>
+            <div id="feedList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Feeds will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    {% include 'chat_widget.html' %}
+
+    {% include 'chat_scripts.html' %}
+    <script>
+        // Poll Queue Status
+        async function updateQueue() {
+            try {
+                const res = await fetch('/api/status/queue');
+                const data = await res.json();
+                const qEl = document.getElementById('queueStatus');
+                if (data.count > 0) {
+                    qEl.style.display = 'inline-flex';
+                    qEl.innerHTML = `<i class="fas fa-clock" style="margin-right:5px"></i> Analyzing ${data.count} stories (~${data.estimate})`;
+                } else {
+                    qEl.style.display = 'none';
+                }
+            } catch (e) { }
+        }
+        setInterval(updateQueue, 5000);
+        updateQueue(); // Init
+
+        async function refreshFeeds() {
+            const btn = document.querySelector('button');
+            const loader = document.getElementById('loading');
+
+            // Save original text
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+
+            btn.disabled = true;
+            loader.style.display = 'block';
+
+            try {
+                const res = await fetch('/refresh');
+                const data = await res.json();
+                alert(data.message || "Refresh complete");
+                window.location.reload();
+            } catch (e) {
+                alert("Error refreshing feeds: " + e);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                loader.style.display = 'none';
+            }
+        }
+
+        // Feed Management Logic
+        const feedModal = document.getElementById('feedModal');
+
+        function openFeedModal() {
+            feedModal.style.display = "block";
+            loadFeeds();
+        }
+
+        function closeFeedModal() {
+            feedModal.style.display = "none";
+        }
+
+        window.onclick = function (event) {
+            if (event.target == feedModal) {
+                closeFeedModal();
+            }
+        }
+
+        async function loadFeeds() {
+            const res = await fetch('/api/feeds');
+            const feeds = await res.json();
+            const list = document.getElementById('feedList');
+            list.innerHTML = "";
+
+            feeds.forEach(feed => {
+                const item = document.createElement('div');
+                item.className = 'feed-item';
+                item.innerHTML = `
+                    <div class="feed-info">
+                        <span class="feed-name">${feed.name}</span>
+                        <span class="feed-url">${feed.url}</span>
+                    </div>
+                    <div class="feed-actions">
+                        <button class="btn-toggle ${feed.active ? 'active' : ''}" onclick="toggleFeed(${feed.id}, ${!feed.active})">
+                            ${feed.active ? 'ON' : 'OFF'}
+                        </button>
+                        <button class="btn-delete" onclick="deleteFeed(${feed.id})">Delete</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function addFeed() {
+            const name = document.getElementById('newFeedName').value;
+            const url = document.getElementById('newFeedUrl').value;
+            if (!name || !url) return alert("Please enter name and URL");
+
+            await fetch('/api/feeds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, url })
+            });
+            document.getElementById('newFeedName').value = "";
+            document.getElementById('newFeedUrl').value = "";
+            loadFeeds();
+        }
+
+        async function deleteFeed(id) {
+            if (!confirm("Are you sure?")) return;
+            await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
+            loadFeeds();
+        }
+
+        async function toggleFeed(id, active) {
+            await fetch(`/api/feeds/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active })
+            });
+            loadFeeds();
+        }
+
+        // Tag Management
+        async function addTag(articleId) {
+            const tag = prompt("Enter new tag:");
+            if (!tag) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload(); // Simple reload to reflect changes
+        }
+
+        async function removeTag(articleId, tag) {
+            if (!confirm(`Remove tag "${tag}"?`)) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload();
+        }
+
+        function exportIOCs(iocsEncoded) {
+            const iocs = decodeURIComponent(iocsEncoded);
+            navigator.clipboard.writeText(iocs).then(() => alert("IOCs copied to clipboard!"));
+        }
+
+        async function reAnalyze(id, btn) {
+            if (!confirm("Re-analyze this article with AI?")) return;
+            // Guard if btn not passed
+            btn = btn || event.target.closest('button');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const res = await fetch(`/api/articles/${id}/analyze`, { method: 'POST' });
+                if (res.ok) {
+                    alert("Queued for analysis!");
+                    window.location.reload();
+                }
+            } catch (e) {
+                alert("Error");
+                btn.innerHTML = '<i class="fas fa-brain"></i>';
+            }
+        }
+    </script>
+</body>
+
+</html>

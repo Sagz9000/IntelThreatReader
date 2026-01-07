@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Analytics - Intel Threat Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        .analytics-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            height: 80vh;
+        }
+
+        .bot-panel {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+        }
+
+        .chart-panel {
+            background: #1a1c2c;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .bot-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .bot-msg {
+            padding: 8px 12px;
+            border-radius: 6px;
+            max-width: 90%;
+            font-size: 0.9em;
+        }
+
+        .bot-msg.ai {
+            background: #333;
+            color: #eee;
+            align-self: flex-start;
+        }
+
+        .bot-msg.user {
+            background: var(--accent-color);
+            color: #000;
+            align-self: flex-end;
+        }
+
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .suggestion-pill {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #ccc;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-pill:hover {
+            border-color: var(--accent-color);
+            color: #fff;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            background: #121212;
+            border: 1px solid #333;
+            color: #fff;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 20px;">
+            <h1><a href="{{ url_for('index') }}" style="color: inherit; text-decoration: none;">Intel Threat Reader</a>
+                <span style="font-weight:100; opacity:0.7">/ Analytics</span>
+            </h1>
+            <nav style="display: flex; gap: 20px;">
+                <a href="{{ url_for('index') }}" style="color: #ccc; text-decoration: none;">Dashboard</a>
+                <a href="{{ url_for('story_feed') }}" style="color: #ccc; text-decoration: none;">Listing</a>
+                <a href="{{ url_for('visuals_page') }}"
+                    style="color: var(--accent-color); text-decoration: none; font-weight: bold;">Visuals</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="analytics-container">
+        <!-- Analyst Bot -->
+        <div class="bot-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-chart-pie" style="color: var(--accent-color); font-size: 1.2em;"></i>
+                    <strong>Data Analyst</strong>
+                </div>
+                <button class="icon-btn" onclick="resetAnalyst()" title="Clear analysis history"
+                    style="background:none; border:none; color:#666; cursor:pointer;"><i
+                        class="fas fa-trash-alt"></i></button>
+            </div>
+
+            <div class="bot-messages" id="botMessages">
+                <div class="bot-msg ai">Hi, I'm your Data Analyst. I can visualize threat data for you. Try asking for a
+                    "Pie chart of categories" or "Bar chart of risk levels".</div>
+            </div>
+
+            <div class="suggestions">
+                <span class="suggestion-pill" onclick="ask('Pie chart of Top 5 Categories')">Pie: Categories</span>
+                <span class="suggestion-pill" onclick="ask('Bar chart: Risk Level counts')">Bar: Risk</span>
+                <span class="suggestion-pill" onclick="ask('Heatmap of Risk vs Category')">Heatmap: Risk/Cat</span>
+            </div>
+
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="userInput" placeholder="Describe the chart you want..."
+                    onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()" style="padding: 0 12px;"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+
+        <!-- Chart Area -->
+        <div class="chart-panel" id="chartPanel">
+            <div style="color: #666; font-style: italic;">Chart area. Visualization will appear here.</div>
+        </div>
+    </div>
+
+    <!-- We deliberately DO NOT include the global chat widget here to avoid confusion, 
+         or we could include it but minimized. User requested "Different bot". 
+         So we rely on the specific Data Analyst panel above. -->
+
+    <script>
+        const msgs = document.getElementById('botMessages');
+        const input = document.getElementById('userInput');
+        const chartPanel = document.getElementById('chartPanel');
+
+        function ask(q) {
+            input.value = q;
+            sendMessage();
+        }
+
+        function resetAnalyst() {
+            if (!confirm("Clear analysis history?")) return;
+            msgs.innerHTML = '<div class="bot-msg ai">Hi, I\'m your Data Analyst. I can visualize threat data for you. Try asking for a "Pie chart of categories" or "Bar chart of risk levels".</div>';
+            chartPanel.innerHTML = '<div style="color: #666; font-style: italic;">Chart area. Visualization will appear here.</div>';
+        }
+
+        async function sendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
+
+            // Add user msg
+            msgs.innerHTML += `<div class="bot-msg user">${text}</div>`;
+            input.value = '';
+            msgs.scrollTop = msgs.scrollHeight;
+
+            // Loading state
+            msgs.innerHTML += `<div class="bot-msg ai" id="tempLoading"><i class="fas fa-spinner fa-spin"></i> Analyzing data...</div>`;
+            msgs.scrollTop = msgs.scrollHeight;
+            chartPanel.innerHTML = '<div style="color:#888;">Generating visualization... <i class="fas fa-spinner fa-spin"></i></div>';
+
+            try {
+                const res = await fetch('/api/generate_chart', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: text })
+                });
+                const data = await res.json();
+
+                // Remove loading
+                document.getElementById('tempLoading').remove();
+
+                if (data.error) {
+                    msgs.innerHTML += `<div class="bot-msg ai" style="color:#ff5252">I couldn't generate that chart. ${data.error}</div>`;
+                    chartPanel.innerHTML = `<div style="color:#ff5252">Generation Failed</div>`;
+                } else {
+                    msgs.innerHTML += `<div class="bot-msg ai">${data.message || "Here is the visualization you requested."}</div>`;
+
+                    // Render Chart
+                    chartPanel.innerHTML = "";
+                    var options = data.chart_options;
+                    // Force theme
+                    options.theme = { mode: 'dark' };
+                    options.chart.background = 'transparent';
+
+                    var chart = new ApexCharts(chartPanel, options);
+                    chart.render();
+                }
+
+            } catch (e) {
+                document.getElementById('tempLoading').remove();
+                msgs.innerHTML += `<div class="bot-msg ai" style="color:#ff5252">Connection error.</div>`;
+            }
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>

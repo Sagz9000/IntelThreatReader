@@ -1,0 +1,185 @@
+<script>
+    // Init Chat State
+    const chatWidget = document.getElementById('chatWidget');
+    const chatBubble = document.getElementById('chatBubble');
+    const chatBody = document.getElementById('chatBody');
+
+    // Restore State logic
+    window.addEventListener('DOMContentLoaded', () => {
+        const history = localStorage.getItem('chatHistory');
+        const minimized = localStorage.getItem('chatMinimized');
+        const pos = JSON.parse(localStorage.getItem('chatPosition') || '{}');
+        const size = JSON.parse(localStorage.getItem('chatSize') || '{}');
+
+        if (history) {
+            chatBody.innerHTML = history;
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        if (minimized === 'true') {
+            chatWidget.style.display = 'none';
+            chatBubble.style.display = 'flex';
+        }
+
+        if (pos.top) {
+            chatWidget.style.top = pos.top;
+            chatWidget.style.left = pos.left;
+            chatWidget.style.bottom = 'auto';
+            chatWidget.style.right = 'auto';
+        }
+        if (size.width) {
+            chatWidget.style.width = size.width;
+            chatWidget.style.height = size.height;
+        }
+
+        initDragAndResize();
+    });
+
+    function saveChatState() {
+        localStorage.setItem('chatMinimized', chatWidget.style.display === 'none');
+        localStorage.setItem('chatPosition', JSON.stringify({
+            top: chatWidget.style.top,
+            left: chatWidget.style.left
+        }));
+        localStorage.setItem('chatSize', JSON.stringify({
+            width: chatWidget.style.width,
+            height: chatWidget.style.height
+        }));
+    }
+
+    function initDragAndResize() {
+        const header = chatWidget.querySelector('.chat-header');
+        let isDragging = false;
+        let isResizing = false;
+
+        // DRAG LOGIC
+        header.onmousedown = (e) => {
+            if (e.target.closest('.icon-btn')) return;
+            isDragging = true;
+            let startX = e.clientX - chatWidget.offsetLeft;
+            let startY = e.clientY - chatWidget.offsetTop;
+
+            const onMouseMove = (e) => {
+                if (!isDragging) return;
+                chatWidget.style.left = (e.clientX - startX) + 'px';
+                chatWidget.style.top = (e.clientY - startY) + 'px';
+                chatWidget.style.bottom = 'auto';
+                chatWidget.style.right = 'auto';
+            };
+
+            const onMouseUp = () => {
+                isDragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                saveChatState();
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+
+        // RESIZE LOGIC via Observer or simply listening to mouseup on the widget
+        // Since we use CSS 'resize: both', we just need to detect when it stops
+        chatWidget.onmouseup = () => {
+            saveChatState();
+        };
+
+        // To support resizing even if mouse leaves while button down
+        document.addEventListener('mouseup', () => {
+            if (isDragging) return; // handled above
+            saveChatState();
+        });
+    }
+
+    function toggleChat() {
+        if (chatWidget.style.display === 'none') {
+            chatWidget.style.display = 'flex';
+            chatBubble.style.display = 'none';
+            localStorage.setItem('chatMinimized', 'false');
+        } else {
+            chatWidget.style.display = 'none';
+            chatBubble.style.display = 'flex';
+            localStorage.setItem('chatMinimized', 'true');
+        }
+    }
+
+    function saveChat() {
+        localStorage.setItem('chatHistory', chatBody.innerHTML);
+    }
+
+    function copyChat(e) {
+        e.stopPropagation();
+        const text = chatBody.innerText;
+        navigator.clipboard.writeText(text).then(() => alert("Chat copied!"));
+    }
+
+    function resetChat(e) {
+        if (e) e.stopPropagation();
+        if (!confirm("Clear chat history?")) return;
+        localStorage.removeItem('chatHistory');
+        chatBody.innerHTML = '<div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>';
+        document.getElementById('chatInput').value = '';
+        saveChat(); // Sync back to localStorage
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('chatInput');
+        const body = document.getElementById('chatBody');
+        const text = input.value.trim();
+        if (!text) return;
+
+        // Add User Msg
+        body.innerHTML += `<div class="msg user">${text}</div>`;
+        input.value = '';
+        body.scrollTop = body.scrollHeight;
+        saveChat();
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: text })
+            });
+            const data = await res.json();
+            let aiText = data.response || "Error getting response";
+
+            // Check for IOC block
+            const iocRegex = /```json\s*({[\s\S]*"iocs"[\s\S]*})\s*```/;
+            const match = aiText.match(iocRegex);
+            let iocHtml = "";
+
+            if (match) {
+                try {
+                    const iocData = JSON.parse(match[1]);
+                    aiText = aiText.replace(iocRegex, ""); // Remove block from display
+                    if (iocData.iocs && iocData.iocs.length > 0) {
+                        const iocsStr = encodeURIComponent(iocData.iocs.join('\\n'));
+                        iocHtml = `<div style="margin-top:10px; padding:10px; background:#333; border-radius:5px;">
+                                <strong><i class="fas fa-bug"></i> Extracted IOCs</strong>
+                                <button onclick="exportIOCs('${iocsStr}')" style="float:right; background:#444; border:none; color:#fff; cursor:pointer;">Export</button>
+                                <ul style="margin:5px 0 0 20px; font-size:0.9em;">
+                                    ${iocData.iocs.map(i => `<li>${i}</li>`).join('')}
+                                </ul>
+                            </div>`;
+                    }
+                } catch (e) { console.error("IOC Parse error", e); }
+            }
+
+            body.innerHTML += `<div class="msg ai">${aiText}${iocHtml}</div>`;
+        } catch (e) {
+            body.innerHTML += `<div class="msg ai">Connection Error</div>`;
+        }
+
+        saveChat();
+        body.scrollTop = body.scrollHeight;
+    }
+
+    document.getElementById('chatInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    function exportIOCs(iocsEncoded) {
+        const iocs = decodeURIComponent(iocsEncoded);
+        navigator.clipboard.writeText(iocs).then(() => alert("IOCs copied to clipboard!"));
+    }
+</script>
