@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Intelligence Listing | Intel Threat Reader</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        .feed-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Heatmap Section */
+        .heatmap-section {
+            background: rgba(26, 28, 44, 0.8);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .heatmap-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .heatmap-input {
+            flex: 1;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 6px;
+        }
+
+        /* Table Styles */
+        .story-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+            /* Row spacing */
+        }
+
+        .story-table th {
+            text-align: left;
+            padding: 12px 20px;
+            color: #8b9bb4;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+
+        .story-table tr.story-row {
+            background: rgba(30, 32, 48, 0.6);
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .story-table tr.story-row:hover {
+            background: rgba(40, 42, 60, 0.8);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .story-table td {
+            padding: 16px 20px;
+            vertical-align: middle;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .story-table td:first-child {
+            border-left: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px 0 0 8px;
+        }
+
+        .story-table td:last-child {
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 0 8px 8px 0;
+        }
+
+        .pill {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 500;
+            display: inline-block;
+        }
+
+        /* Risk Colors */
+        .risk-critical {
+            background: rgba(255, 59, 48, 0.2);
+            color: #ff3b30;
+            border: 1px solid rgba(255, 59, 48, 0.3);
+        }
+
+        .risk-high {
+            background: rgba(255, 149, 0, 0.2);
+            color: #ff9500;
+            border: 1px solid rgba(255, 149, 0, 0.3);
+        }
+
+        .risk-medium {
+            background: rgba(255, 204, 0, 0.2);
+            color: #ffcc00;
+            border: 1px solid rgba(255, 204, 0, 0.3);
+        }
+
+        .risk-low {
+            background: rgba(50, 215, 75, 0.2);
+            color: #32d74b;
+            border: 1px solid rgba(50, 215, 75, 0.3);
+        }
+
+        /* Category Colors */
+        .cat-pill {
+            background: rgba(10, 132, 255, 0.15);
+            color: #0a84ff;
+            border: 1px solid rgba(10, 132, 255, 0.3);
+        }
+
+        .article-title {
+            color: #fff;
+            font-weight: 600;
+            font-size: 1.05em;
+            display: block;
+            margin-bottom: 4px;
+            text-decoration: none;
+        }
+
+        .article-title:hover {
+            color: #0a84ff;
+        }
+
+        .article-summary {
+            color: #8b9bb4;
+            font-size: 0.9em;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body style="background-color: #0b0c15; color: #fff; font-family: 'Inter', sans-serif;">
+
+    <!-- Navbar -->
+    <nav
+        style="display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; background: rgba(26, 28, 44, 0.95); border-bottom: 1px solid #2d2f45;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <i class="fas fa-shield-alt" style="font-size: 1.5em; color: #0a84ff;"></i>
+            <h1 style="margin: 0; font-size: 1.5em; font-weight: 600; color: #e2e8f0;">Intel Threat Reader</h1>
+        </div>
+        <div>
+            <a href="/" class="icon-btn" style="text-decoration: none; margin-right: 15px;">Dashboard</a>
+            <a href="/story-feed" class="icon-btn"
+                style="text-decoration: none; background: #0a84ff; border-color: #0a84ff;">Intelligence Listing</a>
+        </div>
+    </nav>
+
+    <div class="feed-container">
+
+        <!-- Heatmap Generator -->
+        <div class="heatmap-section">
+            <h3 style="margin-top:0"><i class="fas fa-magic"></i> AI Heatmap Generator</h3>
+            <div class="heatmap-controls">
+                <input type="text" id="heatmapQuery" class="heatmap-input"
+                    placeholder="Ask a question about the data (e.g., 'Risk Level by Category' or 'Attacks per Source')..."
+                    value="Risk Level by Attack Category">
+                <button class="icon-btn" onclick="generateHeatmap()">Generate</button>
+            </div>
+            <div id="heatmapChart" style="min-height: 350px;"></div>
+        </div>
+
+        <!-- Story Table -->
+        <h2 style="margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px;">Latest Intelligence</h2>
+        <table class="story-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%">Article</th>
+                    <th>Source</th>
+                    <th>Risk</th>
+                    <th>Category</th>
+                    <th>Published</th>
+                    <th>IOCs</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in articles %}
+                <tr class="story-row">
+                    <td>
+                        <a href="/details/{{ article.id }}" class="article-title">{{ article.title }}</a>
+                        <div id="tags-{{ article.id }}" style="margin-bottom: 5px;">
+                            {% if article.user_tags %}
+                            {% for tag in article.user_tags | from_json %}
+                            <span class="tag user-tag" onclick="removeTag('{{ article.id }}', '{{ tag }}')"
+                                title="Click to remove" style="font-size: 0.7em; padding: 2px 6px;">{{ tag }}
+                                &times;</span>
+                            {% endfor %}
+                            {% endif %}
+                            <button class="icon-btn" onclick="addTag('{{ article.id }}')"
+                                style="padding: 0 4px; font-size: 0.7em;">+</button>
+                        </div>
+                        <span class="article-summary">{{ article.ai_summary }}</span>
+                    </td>
+                    <td>
+                        <span class="pill" style="background:#2d2f45; color:#ccc;">{{ article.source }}</span>
+                    </td>
+                    <td>
+                        <span class="pill risk-{{ article.ai_risk_level | lower }}">{{ article.ai_risk_level }}</span>
+                    </td>
+                    <td>
+                        <span class="pill cat-pill">{{ article.ai_category }}</span>
+                    </td>
+                    <td style="color:#8b9bb4; font-size:0.9em;">
+                        {{ article.published_parsed or article.published }}
+                    </td>
+                    <td>
+                        <!-- IOC Badge Logic (Simulated for now, can check analyzed text) -->
+                        {% if "IOC" in article.ai_summary or "indicator" in article.ai_summary %}
+                        <span class="pill" style="background:rgba(255,59,48,0.1); color:#ff3b30;">Found</span>
+                        {% else %}
+                        <span style="color:#444;">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze"><i
+                                class="fas fa-sync-alt"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function reAnalyze(id) {
+            if (!confirm("Re-analyze this article with AI?")) return;
+            const btn = event.currentTarget || event.target;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const res = await fetch(`/api/articles/${id}/analyze`, { method: 'POST' });
+                if (res.ok) {
+                    alert("Queued for analysis!");
+                    window.location.reload();
+                }
+            } catch (e) {
+                alert("Error");
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+            }
+        }
+
+        async function addTag(articleId) {
+            const tag = prompt("Enter new tag:");
+            if (!tag) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload();
+        }
+
+        async function removeTag(articleId, tag) {
+            if (!confirm(`Remove tag "${tag}"?`)) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload();
+        }
+
+        async function generateHeatmap() {
+            const query = document.getElementById('heatmapQuery').value;
+            const chartDiv = document.querySelector("#heatmapChart");
+            chartDiv.innerHTML = '<div style="text-align:center; padding:50px; color:#888;">Generating visualization... <i class="fas fa-spinner fa-spin"></i></div>';
+
+            try {
+                const res = await fetch('/api/heatmap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    chartDiv.innerHTML = `<div style="color:red; text-align:center;">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                // Render ApexChart
+                var options = {
+                    series: data.series,
+                    chart: {
+                        height: 350,
+                        type: 'heatmap',
+                        toolbar: { show: false },
+                        background: 'transparent'
+                    },
+                    dataLabels: { enabled: true },
+                    colors: ["#008FFB"],
+                    xaxis: { categories: data.x_categories, labels: { style: { colors: '#ccc' } } },
+                    yaxis: { labels: { style: { colors: '#ccc' } } },
+                    theme: { mode: 'dark' },
+                    title: { text: query, align: 'left', style: { color: '#fff' } }
+                };
+
+                chartDiv.innerHTML = "";
+                var chart = new ApexCharts(chartDiv, options);
+                chart.render();
+
+            } catch (e) {
+                chartDiv.innerHTML = `<div style="color:red;">Failed to generate heatmap.</div>`;
+            }
+        }
+
+        // Auto-generate on load
+        generateHeatmap();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intel Threat Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <h1><i class="fas fa-shield-alt"></i> Intel Threat Reader</h1>
+        <div
+            style="background: rgba(30,32,48,0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(10px);">
+            <div style="flex: 1;">
+                <h2 style="margin: 0 0 5px 0; font-size: 1.4em; color: #fff;"><i class="fas fa-list-ul"
+                        style="color: #0a84ff;"></i> Intelligence Listing</h2>
+                <p style="margin: 0; color: #8b9bb4; font-size: 0.95em;">Standardized tabular view of all analyzed
+                    threats with advanced sorting and AI visualizations.</p>
+            </div>
+            <a href="/story-feed" class="icon-btn"
+                style="text-decoration: none; background: linear-gradient(135deg, #0a84ff 0%, #0056b3 100%); border: none; padding: 12px 25px; border-radius: 8px; font-weight: 600; color: #fff; font-size: 1.1em; box-shadow: 0 4px 15px rgba(10, 132, 255, 0.3); transition: transform 0.2s;">View
+                Full Listing <i class="fas fa-arrow-right" style="margin-left: 10px;"></i></a>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; margin-bottom: 2rem;">
+            <div id="loading" class="loader"></div>
+            <button onclick="refreshFeeds()"><i class="fas fa-sync"></i> Refresh Feeds</button>
+            <button onclick="openFeedModal()" style="background: #444; margin-left: 0.5rem;"><i class="fas fa-cog"></i>
+                Manage Feeds</button>
+        </div>
+    </header>
+
+    <div class="container">
+        {% if not latest and not categories %}
+        <div style="text-align: center; margin-top: 4rem;">
+            <h2>No Intelligence Data Found</h2>
+            <p>Click "Refresh Feeds" to fetch the latest threat reports.</p>
+        </div>
+        {% endif %}
+
+        {% if latest %}
+        <h2 class="section-title">Latest & Unclassified</h2>
+        <div class="grid">
+            {% for article in latest %}
+            <div class="card">
+                <h3><a href="{{ url_for('details', article_id=article.id) }}">{{ article.title }}</a></h3>
+                <div class="meta">{{ article.published }}</div>
+                <div class="summary">
+                    {% if article.analyzed %}
+                    {{ article.ai_summary }}
+                    {% else %}
+                    Analyzing...
+                    {% endif %}
+                </div>
+                <div class="tags">
+                    {% if article.analyzed %}
+                    <span class="tag risk-{{ article.ai_risk_level }}">{{ article.ai_risk_level }} Risk</span>
+                    <span class="tag">{{ article.ai_category }}</span>
+                    {% else %}
+                    <span class="tag">Pending AI</span>
+                    {% endif %}
+                    {% if article.source %}
+                    <span class="tag source-tag"><i class="fas fa-rss"></i> {{ article.source }}</span>
+                    {% endif %}
+
+                    <!-- User Tags -->
+                    <div id="tags-{{ article.id }}" style="display:contents">
+                        {% if article.user_tags %}
+                        {% for tag in article.user_tags | from_json %}
+                        <span class="tag user-tag" onclick="removeTag('{{ article.id }}', '{{ tag }}')"
+                            title="Click to remove">{{ tag }} &times;</span>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    <button class="icon-btn" onclick="addTag('{{ article.id }}')" style="padding: 0 4px;">+</button>
+                    <div class="card-actions"
+                        style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; padding-top: 10px; display: flex; justify-content: flex-end;">
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze with AI"><i
+                                class="fas fa-brain"></i></button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% for category, articles in categories.items() %}
+        <h2 class="section-title">{{ category }}</h2>
+        <div class="grid">
+            {% for article in articles %}
+            <div class="card">
+                <h3><a href="{{ url_for('details', article_id=article.id) }}">{{ article.title }}</a></h3>
+                <div class="meta">{{ article.published }}</div>
+                <div class="summary">{{ article.ai_summary }}</div>
+                <div class="tags">
+                    <span class="tag risk-{{ article.ai_risk_level }}">{{ article.ai_risk_level }} Risk</span>
+                    {% if article.source %}
+                    <span class="tag source-tag"><i class="fas fa-rss"></i> {{ article.source }}</span>
+                    {% endif %}
+
+                    <!-- User Tags -->
+                    <div id="tags-{{ article.id }}" style="display:contents">
+                        {% if article.user_tags %}
+                        {% for tag in article.user_tags | from_json %}
+                        <span class="tag user-tag" onclick="removeTag('{{ article.id }}', '{{ tag }}')"
+                            title="Click to remove">{{ tag }} &times;</span>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    <button class="icon-btn" onclick="addTag('{{ article.id }}')" style="padding: 0 4px;">+</button>
+                    <div class="card-actions"
+                        style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; padding-top: 10px; display: flex; justify-content: flex-end;">
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze with AI"><i
+                                class="fas fa-brain"></i></button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Feed Management Modal -->
+    <div id="feedModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeFeedModal()">&times;</span>
+            <div class="chat-header">Manage RSS Feeds</div>
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                <input type="text" id="newFeedName" placeholder="Feed Name"
+                    style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <input type="text" id="newFeedUrl" placeholder="RSS URL"
+                    style="flex: 2; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <button onclick="addFeed()"
+                    style="padding: 8px 16px; background: #00ce08; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+            </div>
+            <div id="feedList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Feeds will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Feed Management Modal -->
+    <div id="feedModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeFeedModal()">&times;</span>
+            <div class="chat-header">Manage RSS Feeds</div>
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                <input type="text" id="newFeedName" placeholder="Feed Name"
+                    style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <input type="text" id="newFeedUrl" placeholder="RSS URL"
+                    style="flex: 2; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                <button onclick="addFeed()"
+                    style="padding: 8px 16px; background: #00ce08; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+            </div>
+            <div id="feedList" style="max-height: 400px; overflow-y: auto;">
+                <!-- Feeds will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Widget -->
+    <div id="chatWidget" class="chat-widget">
+        <div class="chat-header" onclick="toggleChat()" style="cursor: pointer;">
+            <span><i class="fas fa-robot"></i> AI Analyst</span>
+            <div>
+                <button class="icon-btn" onclick="copyChat(event)" title="Copy Transcript"><i
+                        class="fas fa-copy"></i></button>
+                <button class="icon-btn" onclick="resetChat(event)" title="Reset Chat"><i
+                        class="fas fa-trash-alt"></i></button>
+                <button class="icon-btn" id="toggleApi" title="Minimize"><i class="fas fa-window-minimize"></i></button>
+            </div>
+        </div>
+        <div class="chat-body" id="chatBody">
+            <div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Ask about threats...">
+            <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <!-- Chat Bubble (Minimized) -->
+    <div id="chatBubble" class="chat-bubble" onclick="toggleChat()" style="display: none;">
+        <i class="fas fa-robot"></i>
+    </div>
+
+    <script>
+        // Init Chat State
+        const chatWidget = document.getElementById('chatWidget');
+        const chatBubble = document.getElementById('chatBubble');
+        const chatBody = document.getElementById('chatBody');
+
+        // Restore State logic
+        window.addEventListener('DOMContentLoaded', () => {
+            const history = localStorage.getItem('chatHistory');
+            const minimized = localStorage.getItem('chatMinimized');
+
+            if (history) {
+                chatBody.innerHTML = history;
+                chatBody.scrollTop = chatBody.scrollHeight;
+            }
+
+            if (minimized === 'true') {
+                chatWidget.style.display = 'none';
+                chatBubble.style.display = 'flex';
+            }
+        });
+
+        function toggleChat() {
+            if (chatWidget.style.display === 'none') {
+                chatWidget.style.display = 'flex';
+                chatBubble.style.display = 'none';
+                localStorage.setItem('chatMinimized', 'false');
+            } else {
+                chatWidget.style.display = 'none';
+                chatBubble.style.display = 'flex';
+                localStorage.setItem('chatMinimized', 'true');
+            }
+        }
+
+        function saveChat() {
+            localStorage.setItem('chatHistory', chatBody.innerHTML);
+        }
+
+        function copyChat(e) {
+            e.stopPropagation();
+            const text = chatBody.innerText;
+            navigator.clipboard.writeText(text).then(() => alert("Chat copied!"));
+        }
+
+        function resetChat(e) {
+            e.stopPropagation();
+            if (!confirm("Clear chat history?")) return;
+            localStorage.removeItem('chatHistory');
+            chatBody.innerHTML = '<div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>';
+        }
+
+        async function refreshFeeds() {
+            const btn = document.querySelector('button');
+            const loader = document.getElementById('loading');
+
+            // Save original text
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+
+            btn.disabled = true;
+            loader.style.display = 'block';
+
+            try {
+                const res = await fetch('/refresh');
+                const data = await res.json();
+                alert(data.message || "Refresh complete");
+                window.location.reload();
+            } catch (e) {
+                alert("Error refreshing feeds: " + e);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                loader.style.display = 'none';
+            }
+        }
+
+        // Feed Management Logic
+        const feedModal = document.getElementById('feedModal');
+
+        function openFeedModal() {
+            feedModal.style.display = "block";
+            loadFeeds();
+        }
+
+        function closeFeedModal() {
+            feedModal.style.display = "none";
+        }
+
+        window.onclick = function (event) {
+            if (event.target == feedModal) {
+                closeFeedModal();
+            }
+        }
+
+        async function loadFeeds() {
+            const res = await fetch('/api/feeds');
+            const feeds = await res.json();
+            const list = document.getElementById('feedList');
+            list.innerHTML = "";
+
+            feeds.forEach(feed => {
+                const item = document.createElement('div');
+                item.className = 'feed-item';
+                item.innerHTML = `
+                    <div class="feed-info">
+                        <span class="feed-name">${feed.name}</span>
+                        <span class="feed-url">${feed.url}</span>
+                    </div>
+                    <div class="feed-actions">
+                        <button class="btn-toggle ${feed.active ? 'active' : ''}" onclick="toggleFeed(${feed.id}, ${!feed.active})">
+                            ${feed.active ? 'ON' : 'OFF'}
+                        </button>
+                        <button class="btn-delete" onclick="deleteFeed(${feed.id})">Delete</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function addFeed() {
+            const name = document.getElementById('newFeedName').value;
+            const url = document.getElementById('newFeedUrl').value;
+            if (!name || !url) return alert("Please enter name and URL");
+
+            await fetch('/api/feeds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, url })
+            });
+            document.getElementById('newFeedName').value = "";
+            document.getElementById('newFeedUrl').value = "";
+            loadFeeds();
+        }
+
+        async function deleteFeed(id) {
+            if (!confirm("Are you sure?")) return;
+            await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
+            loadFeeds();
+        }
+
+        async function toggleFeed(id, active) {
+            await fetch(`/api/feeds/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active })
+            });
+            loadFeeds();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const body = document.getElementById('chatBody');
+            const text = input.value.trim();
+            if (!text) return;
+
+            // Add User Msg
+            body.innerHTML += `<div class="msg user">${text}</div>`;
+            input.value = '';
+            body.scrollTop = body.scrollHeight;
+            saveChat();
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: text })
+                });
+                const data = await res.json();
+                let aiText = data.response || "Error getting response";
+
+                // Check for IOC block
+                const iocRegex = /```json\s*({[\s\S]*"iocs"[\s\S]*})\s*```/;
+                const match = aiText.match(iocRegex);
+                let iocHtml = "";
+
+                if (match) {
+                    try {
+                        const iocData = JSON.parse(match[1]);
+                        aiText = aiText.replace(iocRegex, ""); // Remove block from display
+                        if (iocData.iocs && iocData.iocs.length > 0) {
+                            const iocsStr = encodeURIComponent(iocData.iocs.join('\\n'));
+                            iocHtml = `<div style="margin-top:10px; padding:10px; background:#333; border-radius:5px;">
+                                <strong><i class="fas fa-bug"></i> Extracted IOCs</strong>
+                                <button onclick="exportIOCs('${iocsStr}')" style="float:right; background:#444; border:none; color:#fff; cursor:pointer;">Export</button>
+                                <ul style="margin:5px 0 0 20px; font-size:0.9em;">
+                                    ${iocData.iocs.map(i => `<li>${i}</li>`).join('')}
+                                </ul>
+                            </div>`;
+                        }
+                    } catch (e) { console.error("IOC Parse error", e); }
+                }
+
+                body.innerHTML += `<div class="msg ai">${aiText}${iocHtml}</div>`;
+            } catch (e) {
+                body.innerHTML += `<div class="msg ai">Connection Error</div>`;
+            }
+
+            saveChat();
+            body.scrollTop = body.scrollHeight;
+        }
+
+        document.getElementById('chatInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Tag Management
+        async function addTag(articleId) {
+            const tag = prompt("Enter new tag:");
+            if (!tag) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload(); // Simple reload to reflect changes
+        }
+
+        async function removeTag(articleId, tag) {
+            if (!confirm(`Remove tag "${tag}"?`)) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload();
+        }
+
+        function exportIOCs(iocsEncoded) {
+            const iocs = decodeURIComponent(iocsEncoded);
+            navigator.clipboard.writeText(iocs).then(() => alert("IOCs copied to clipboard!"));
+        }
+
+        async function reAnalyze(id) {
+            if (!confirm("Re-analyze this article with AI?")) return;
+            const btn = event.currentTarget;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const res = await fetch(`/api/articles/${id}/analyze`, { method: 'POST' });
+                if (res.ok) {
+                    alert("Queued for analysis!");
+                    window.location.reload();
+                }
+            } catch (e) {
+                alert("Error");
+                btn.innerHTML = '<i class="fas fa-brain"></i>';
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ article.title }} - Intel Threat Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 20px;">
+            <h1><a href="{{ url_for('index') }}" style="color: inherit; text-decoration: none;"><i
+                        class="fas fa-arrow-left"></i> Dashboard</a></h1>
+            <div style="display: flex; gap: 10px;">
+                <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze with AI"><i
+                        class="fas fa-brain"></i> Re-Analyze</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="details-container">
+        <h1>{{ article.title }}</h1>
+        <div class="meta">
+            Published: {{ article.published }} | Source: <a href="{{ article.link }}" target="_blank"
+                style="color: var(--accent-color);">Read Original</a>
+        </div>
+
+        {% if article.analyzed %}
+        <div class="ai-box">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                <h3><i class="fas fa-brain"></i> AI Analysis</h3>
+                <div style="display: flex; gap: 5px;">
+                    <span class="tag risk-{{ article.ai_risk_level }}">{{ article.ai_risk_level }} Risk</span>
+                    <span class="tag">{{ article.ai_category }}</span>
+                </div>
+            </div>
+            <p><strong>Executive Summary:</strong> {{ article.ai_summary }}</p>
+
+            <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                <p style="font-size: 0.9em; color: #8b9bb4; margin-bottom: 10px;"><strong>User Tags:</strong></p>
+                <div id="tags-{{ article.id }}" style="display:contents">
+                    {% if article.user_tags %}
+                    {% for tag in article.user_tags | from_json %}
+                    <span class="tag user-tag" onclick="removeTag('{{ article.id }}', '{{ tag }}')"
+                        title="Click to remove">{{ tag }} &times;</span>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+                <button class="icon-btn" onclick="addTag('{{ article.id }}')"
+                    style="padding: 2px 8px; font-size: 0.8em;">+ Add Tag</button>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="content">
+            {% if article.content %}
+            <h3>Full Article</h3>
+            <div style="white-space: pre-wrap; color: #ccc; margin-bottom: 2rem;">{{ article.content }}</div>
+            {% else %}
+            <h3>Summary</h3>
+            <p>{{ article.summary }}</p>
+            <p><i>(Full content could not be retrieved)</i></p>
+            {% endif %}
+
+            {% if article.media %}
+            <div class="media-gallery" style="margin-top: 2rem;">
+                <h3>Multimedia Evidence</h3>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    {% set media_list = article.media | from_json %}
+                    {% for img_url in media_list %}
+                    <img src="{{ img_url }}" alt="Article Evidence"
+                        style="max-width: 100%; border-radius: 8px; border: 1px solid #444;">
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <script>
+        async function reAnalyze(id) {
+            if (!confirm("Re-analyze this article with AI?")) return;
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/articles/${id}/analyze`, { method: 'POST' });
+                if (res.ok) {
+                    alert("Queued for analysis!");
+                    window.location.href = '/';
+                }
+            } catch (e) {
+                alert("Error");
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        }
+
+        async function addTag(articleId) {
+            const tag = prompt("Enter new tag:");
+            if (!tag) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload();
+        }
+
+        async function removeTag(articleId, tag) {
+            if (!confirm(`Remove tag "${tag}"?`)) return;
+
+            await fetch(`/api/articles/${articleId}/tags`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag })
+            });
+            window.location.reload();
+        }
+    </script>
+</body>
+
+</html>
