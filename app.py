@@ -679,6 +679,23 @@ def reanalyze_article(article_id):
     conn.close()
     return jsonify({"success": True})
 
+@app.route('/api/status/queue')
+def queue_status():
+    conn = get_db_connection()
+    c = conn.cursor()
+    # Count pending articles
+    pending_count = c.execute("SELECT COUNT(*) FROM articles WHERE analyzed = 0").fetchone()[0]
+    conn.close()
+    
+    # Estimate: assume 20s per article
+    est_seconds = pending_count * 20
+    if est_seconds > 60:
+        est_str = f"{est_seconds // 60} mins"
+    else:
+        est_str = f"{est_seconds} sec"
+        
+    return jsonify({"count": pending_count, "estimate": est_str})
+
 @app.route('/favicon.ico')
 def favicon():
     return '', 204

@@ -12,8 +12,8 @@
 <body>
     <header>
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 20px;">
-            <h1><a href="{{ url_for('index') }}" style="color: inherit; text-decoration: none;"><i
-                        class="fas fa-arrow-left"></i> Dashboard</a></h1>
+            <h1><a href="#" onclick="goBack(event)" style="color: inherit; text-decoration: none;"><i
+                        class="fas fa-arrow-left"></i> <span id="backText">Back</span></a></h1>
             <div style="display: flex; gap: 10px;">
                 <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze with AI"><i
                         class="fas fa-brain"></i> Re-Analyze</button>
@@ -79,24 +79,47 @@
             {% endif %}
         </div>
     </div>
+    {% include 'chat_widget.html' %}
+    {% include 'chat_scripts.html' %}
+
     <script>
+        // Navigation Logic
+        const params = new URLSearchParams(window.location.search);
+        const source = params.get('source');
+        const backLink = document.querySelector('header h1 a');
+        const backText = document.getElementById('backText');
+
+        if (source === 'story_feed') {
+            backText.innerText = "Intelligence Listing";
+            // Check if we can go back in history to the feed, otherwise direct link
+            // We use history.back() if possible to preserve scroll state
+        } else {
+            backText.innerText = "Dashboard";
+        }
+
+        function goBack(e) {
+            e.preventDefault();
+            if (source === 'story_feed') {
+                window.location.href = '/story-feed';
+            } else {
+                window.location.href = '/';
+            }
+        }
+
         async function reAnalyze(id) {
             if (!confirm("Re-analyze this article with AI?")) return;
-            const btn = event.currentTarget;
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
-            btn.disabled = true;
+            const btn = event.currentTarget || event.target;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
             try {
                 const res = await fetch(`/api/articles/${id}/analyze`, { method: 'POST' });
                 if (res.ok) {
                     alert("Queued for analysis!");
-                    window.location.href = '/';
+                    window.location.reload();
                 }
             } catch (e) {
                 alert("Error");
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
             }
         }
 

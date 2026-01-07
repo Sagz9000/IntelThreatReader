@@ -25,6 +25,9 @@
                 Full Listing <i class="fas fa-arrow-right" style="margin-left: 10px;"></i></a>
         </div>
         <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; margin-bottom: 2rem;">
+            <div id="queueStatus"
+                style="display:none; background:rgba(10, 132, 255, 0.2); padding: 8px 15px; border-radius: 20px; color: #0a84ff; font-size: 0.9em; align-items: center; border: 1px solid rgba(10, 132, 255, 0.3);">
+            </div>
             <div id="loading" class="loader"></div>
             <button onclick="refreshFeeds()"><i class="fas fa-sync"></i> Refresh Feeds</button>
             <button onclick="openFeedModal()" style="background: #444; margin-left: 0.5rem;"><i class="fas fa-cog"></i>
@@ -160,82 +163,26 @@
         </div>
     </div>
 
-    <!-- Chat Widget -->
-    <div id="chatWidget" class="chat-widget">
-        <div class="chat-header" onclick="toggleChat()" style="cursor: pointer;">
-            <span><i class="fas fa-robot"></i> AI Analyst</span>
-            <div>
-                <button class="icon-btn" onclick="copyChat(event)" title="Copy Transcript"><i
-                        class="fas fa-copy"></i></button>
-                <button class="icon-btn" onclick="resetChat(event)" title="Reset Chat"><i
-                        class="fas fa-trash-alt"></i></button>
-                <button class="icon-btn" id="toggleApi" title="Minimize"><i class="fas fa-window-minimize"></i></button>
-            </div>
-        </div>
-        <div class="chat-body" id="chatBody">
-            <div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>
-        </div>
-        <div class="chat-input-area">
-            <input type="text" id="chatInput" placeholder="Ask about threats...">
-            <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
-        </div>
-    </div>
+    {% include 'chat_widget.html' %}
 
-    <!-- Chat Bubble (Minimized) -->
-    <div id="chatBubble" class="chat-bubble" onclick="toggleChat()" style="display: none;">
-        <i class="fas fa-robot"></i>
-    </div>
-
+    {% include 'chat_scripts.html' %}
     <script>
-        // Init Chat State
-        const chatWidget = document.getElementById('chatWidget');
-        const chatBubble = document.getElementById('chatBubble');
-        const chatBody = document.getElementById('chatBody');
-
-        // Restore State logic
-        window.addEventListener('DOMContentLoaded', () => {
-            const history = localStorage.getItem('chatHistory');
-            const minimized = localStorage.getItem('chatMinimized');
-
-            if (history) {
-                chatBody.innerHTML = history;
-                chatBody.scrollTop = chatBody.scrollHeight;
-            }
-
-            if (minimized === 'true') {
-                chatWidget.style.display = 'none';
-                chatBubble.style.display = 'flex';
-            }
-        });
-
-        function toggleChat() {
-            if (chatWidget.style.display === 'none') {
-                chatWidget.style.display = 'flex';
-                chatBubble.style.display = 'none';
-                localStorage.setItem('chatMinimized', 'false');
-            } else {
-                chatWidget.style.display = 'none';
-                chatBubble.style.display = 'flex';
-                localStorage.setItem('chatMinimized', 'true');
-            }
+        // Poll Queue Status
+        async function updateQueue() {
+            try {
+                const res = await fetch('/api/status/queue');
+                const data = await res.json();
+                const qEl = document.getElementById('queueStatus');
+                if (data.count > 0) {
+                    qEl.style.display = 'inline-flex';
+                    qEl.innerHTML = `<i class="fas fa-clock" style="margin-right:5px"></i> Analyzing ${data.count} stories (~${data.estimate})`;
+                } else {
+                    qEl.style.display = 'none';
+                }
+            } catch (e) { }
         }
-
-        function saveChat() {
-            localStorage.setItem('chatHistory', chatBody.innerHTML);
-        }
-
-        function copyChat(e) {
-            e.stopPropagation();
-            const text = chatBody.innerText;
-            navigator.clipboard.writeText(text).then(() => alert("Chat copied!"));
-        }
-
-        function resetChat(e) {
-            e.stopPropagation();
-            if (!confirm("Clear chat history?")) return;
-            localStorage.removeItem('chatHistory');
-            chatBody.innerHTML = '<div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>';
-        }
+        setInterval(updateQueue, 5000);
+        updateQueue(); // Init
 
         async function refreshFeeds() {
             const btn = document.querySelector('button');
@@ -334,62 +281,6 @@
             });
             loadFeeds();
         }
-
-        async function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const body = document.getElementById('chatBody');
-            const text = input.value.trim();
-            if (!text) return;
-
-            // Add User Msg
-            body.innerHTML += `<div class="msg user">${text}</div>`;
-            input.value = '';
-            body.scrollTop = body.scrollHeight;
-            saveChat();
-
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: text })
-                });
-                const data = await res.json();
-                let aiText = data.response || "Error getting response";
-
-                // Check for IOC block
-                const iocRegex = /```json\s*({[\s\S]*"iocs"[\s\S]*})\s*```/;
-                const match = aiText.match(iocRegex);
-                let iocHtml = "";
-
-                if (match) {
-                    try {
-                        const iocData = JSON.parse(match[1]);
-                        aiText = aiText.replace(iocRegex, ""); // Remove block from display
-                        if (iocData.iocs && iocData.iocs.length > 0) {
-                            const iocsStr = encodeURIComponent(iocData.iocs.join('\\n'));
-                            iocHtml = `<div style="margin-top:10px; padding:10px; background:#333; border-radius:5px;">
-                                <strong><i class="fas fa-bug"></i> Extracted IOCs</strong>
-                                <button onclick="exportIOCs('${iocsStr}')" style="float:right; background:#444; border:none; color:#fff; cursor:pointer;">Export</button>
-                                <ul style="margin:5px 0 0 20px; font-size:0.9em;">
-                                    ${iocData.iocs.map(i => `<li>${i}</li>`).join('')}
-                                </ul>
-                            </div>`;
-                        }
-                    } catch (e) { console.error("IOC Parse error", e); }
-                }
-
-                body.innerHTML += `<div class="msg ai">${aiText}${iocHtml}</div>`;
-            } catch (e) {
-                body.innerHTML += `<div class="msg ai">Connection Error</div>`;
-            }
-
-            saveChat();
-            body.scrollTop = body.scrollHeight;
-        }
-
-        document.getElementById('chatInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') sendMessage();
-        });
 
         // Tag Management
         async function addTag(articleId) {

@@ -197,7 +197,8 @@
                 {% for article in articles %}
                 <tr class="story-row">
                     <td>
-                        <a href="/details/{{ article.id }}" class="article-title">{{ article.title }}</a>
+                        <a href="/details/{{ article.id }}?source=story_feed" class="article-title">{{ article.title
+                            }}</a>
                         <div id="tags-{{ article.id }}" style="margin-bottom: 5px;">
                             {% if article.user_tags %}
                             {% for tag in article.user_tags | from_json %}
@@ -241,6 +242,9 @@
         </table>
     </div>
 
+    {% include 'chat_widget.html' %}
+
+    {% include 'chat_scripts.html' %}
     <script>
         async function reAnalyze(id) {
             if (!confirm("Re-analyze this article with AI?")) return;

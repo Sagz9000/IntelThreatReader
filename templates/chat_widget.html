@@ -1,0 +1,25 @@
+<!-- Chat Widget -->
+<div id="chatWidget" class="chat-widget">
+    <div class="chat-header" onclick="toggleChat()" style="cursor: pointer;">
+        <span><i class="fas fa-robot"></i> AI Analyst</span>
+        <div>
+            <button class="icon-btn" onclick="copyChat(event)" title="Copy Transcript"><i
+                    class="fas fa-copy"></i></button>
+            <button class="icon-btn" onclick="resetChat(event)" title="Reset Chat"><i
+                    class="fas fa-trash-alt"></i></button>
+            <button class="icon-btn" id="toggleApi" title="Minimize"><i class="fas fa-window-minimize"></i></button>
+        </div>
+    </div>
+    <div class="chat-body" id="chatBody">
+        <div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>
+    </div>
+    <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="Ask about threats...">
+        <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+    </div>
+</div>
+
+<!-- Chat Bubble (Minimized) -->
+<div id="chatBubble" class="chat-bubble" onclick="toggleChat()" style="display: none;">
+    <i class="fas fa-robot"></i>
+</div>

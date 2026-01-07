@@ -2,7 +2,8 @@
     --bg-color: #121212;
     --card-bg: #1e1e1e;
     --text-color: #e0e0e0;
-    --accent-color: #00bcd4; /* Cyan */
+    --accent-color: #00bcd4;
+    /* Cyan */
     --danger-color: #ff5252;
     --warning-color: #ffb74d;
     --success-color: #66bb6a;
@@ -84,7 +85,7 @@ button:hover {
 
 .card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .card h3 {
@@ -129,9 +130,24 @@ button:hover {
     color: #fff;
 }
 
-.tag.risk-Critical, .tag.risk-High { background-color: rgba(255, 82, 82, 0.2); color: var(--danger-color); border: 1px solid var(--danger-color); }
-.tag.risk-Medium { background-color: rgba(255, 183, 77, 0.2); color: var(--warning-color); border: 1px solid var(--warning-color); }
-.tag.risk-Low { background-color: rgba(102, 187, 106, 0.2); color: var(--success-color); border: 1px solid var(--success-color); }
+.tag.risk-Critical,
+.tag.risk-High {
+    background-color: rgba(255, 82, 82, 0.2);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+}
+
+.tag.risk-Medium {
+    background-color: rgba(255, 183, 77, 0.2);
+    color: var(--warning-color);
+    border: 1px solid var(--warning-color);
+}
+
+.tag.risk-Low {
+    background-color: rgba(102, 187, 106, 0.2);
+    color: var(--success-color);
+    border: 1px solid var(--success-color);
+}
 
 /* Chat */
 .chat-widget {
@@ -142,11 +158,15 @@ button:hover {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
     height: 500px;
     z-index: 1000;
+    resize: both;
+    overflow: hidden;
+    min-width: 250px;
+    min-height: 200px;
 }
 
 .chat-header {
@@ -157,6 +177,8 @@ button:hover {
     justify-content: space-between;
     align-items: center;
     border-radius: 8px 8px 0 0;
+    cursor: move;
+    flex-shrink: 0;
 }
 
 .chat-body {
@@ -213,7 +235,15 @@ button:hover {
     display: none;
 }
 
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
 
 /* Details Page */
 .details-container {
@@ -232,28 +262,139 @@ button:hover {
 }
 
 /* Modal Styles */
-.modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); }
-.modal-content { background-color: #1a1c2c; margin: 10% auto; padding: 20px; border: 1px solid #444; width: 60%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-.close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-.close-btn:hover { color: #fff; }
-.feed-item { display: flex; justify-content: space-between; align-items: center; background: #25283d; padding: 10px; margin-bottom: 8px; border-radius: 4px; }
-.feed-info { display: flex; flex-direction: column; }
-.feed-name { font-weight: bold; color: #fff; }
-.feed-url { font-size: 0.8em; color: #888; }
-.feed-actions button { padding: 4px 8px; margin-left: 5px; border: none; border-radius: 3px; cursor: pointer; }
-.btn-delete { background: #ff4444; color: white; }
-.btn-toggle { background: #444; color: white; }
-.btn-toggle.active { background: #00ce08; }
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+}
 
-.tag.source-tag { background-color: rgba(0, 188, 212, 0.1); color: var(--accent-color); border: 1px solid var(--accent-color); font-style: italic; }
+.modal-content {
+    background-color: #1a1c2c;
+    margin: 10% auto;
+    padding: 20px;
+    border: 1px solid #444;
+    width: 60%;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+.close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-btn:hover {
+    color: #fff;
+}
+
+.feed-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #25283d;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+}
+
+.feed-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.feed-name {
+    font-weight: bold;
+    color: #fff;
+}
+
+.feed-url {
+    font-size: 0.8em;
+    color: #888;
+}
+
+.feed-actions button {
+    padding: 4px 8px;
+    margin-left: 5px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.btn-delete {
+    background: #ff4444;
+    color: white;
+}
+
+.btn-toggle {
+    background: #444;
+    color: white;
+}
+
+.btn-toggle.active {
+    background: #00ce08;
+}
+
+.tag.source-tag {
+    background-color: rgba(0, 188, 212, 0.1);
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    font-style: italic;
+}
 
 
 /* Chat Enhancements */
-.icon-btn { background: none; border: none; color: #ccc; cursor: pointer; padding: 5px; font-size: 0.9rem; }
-.icon-btn:hover { color: #fff; }
-.chat-bubble { position: fixed; bottom: 2rem; right: 2rem; width: 60px; height: 60px; background-color: var(--accent-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; color: black; box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; z-index: 1000; transition: transform 0.2s; }
-.chat-bubble:hover { transform: scale(1.1); }
+.icon-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    padding: 5px;
+    font-size: 0.9rem;
+}
+
+.icon-btn:hover {
+    color: #fff;
+}
+
+.chat-bubble {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 60px;
+    height: 60px;
+    background-color: var(--accent-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: black;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    z-index: 1000;
+    transition: transform 0.2s;
+}
+
+.chat-bubble:hover {
+    transform: scale(1.1);
+}
 
 /* User Tags */
-.user-tag { background: #007bff; color: white; cursor: pointer; }
-.user-tag:hover { background: #0056b3; opacity: 0.8; }
+.user-tag {
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+}
+
+.user-tag:hover {
+    background: #0056b3;
+    opacity: 0.8;
+}
