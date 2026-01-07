@@ -557,15 +557,27 @@ def chat():
     context_str = ""
     retrieved_media = []
     
+    # Process Frontend Context
+    frontend_context = data.get('context', {})
+    page_awareness = ""
+    if frontend_context:
+        page_type = frontend_context.get('pageType')
+        if page_type == 'article_details':
+            art = frontend_context.get('currentArticle', {})
+            page_awareness = f"\n[USER IS CURRENTLY VIEWING THIS ARTICLE]:\nTitle: {art.get('title')}\nRisk: {art.get('risk')}\nSummary: {art.get('summary')}\nLink: {art.get('sourceLink')}\n"
+        elif page_type in ['dashboard', 'listing']:
+            arts = frontend_context.get('articles', [])
+            titles = ", ".join([a.get('title') for a in arts[:10]])
+            page_awareness = f"\n[USER IS VIEWING A LIST OF ARTICLES INCLUDING]: {titles}\n"
+
     if vectorstore:
         try:
-            # Perform similarity search (case-insensitive for embeddings typically, but lowercasing helps normalization)
-            # We lowercase the query here to match standardized embeddings if they were trained that way, 
-            # or just for consistent intent.
+            # Perform similarity search
             docs = vectorstore.similarity_search(query.lower(), k=3)
             context_pieces = []
             for d in docs:
-                context_pieces.append(f"--- ARTICLE: {d.metadata.get('title')} ---\n{d.page_content}")
+                source_url = d.metadata.get('source', 'Unknown')
+                context_pieces.append(f"--- ARTICLE: {d.metadata.get('title')} ---\nURL: {source_url}\n{d.page_content}")
                 # Retrieve media for this article from DB
                 aid = d.metadata.get('id')
                 if aid:
@@ -573,7 +585,7 @@ def chat():
                     res = conn_m.execute("SELECT media FROM articles WHERE id = ?", (aid,)).fetchone()
                     if res and res['media']:
                         urls = json.loads(res['media'])
-                        retrieved_media.extend(urls[:1]) # Just take the first image for context to be efficient
+                        retrieved_media.extend(urls[:1]) 
                     conn_m.close()
                     
             context_str = "\n\n".join(context_pieces)
@@ -600,11 +612,14 @@ def chat():
         
         prompt_text = (
             f"You are an expert Threat Intelligence Analyst.\n"
-            f"Context:\n{context_str}\n\n"
+            f"Current Page Context: {page_awareness}\n\n"
+            f"Knowledge Base Context:\n{context_str}\n\n"
             f"Question: {query}\n\n"
             f"Rules:\n"
-            f"1. DEFANG all links/IPs (e.g., example[.]com).\n"
-            f"2. If IOCs are present, append a JSON block:\n"
+            f"1. Acknowledge what the user is currently looking at if relevant.\n"
+            f"2. Provide clickable Markdown links [Title](URL) for articles mentioned.\n"
+            f"3. Do NOT defang URLs if they are reputable news sources.\n"
+            f"4. If IOCs are present, append a JSON block:\n"
             f"```json\n{{\"iocs\": [\"ioc1\"]}}\n```\n"
             f"Assistant:"
         )

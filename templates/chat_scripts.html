@@ -107,6 +107,51 @@
         localStorage.setItem('chatHistory', chatBody.innerHTML);
     }
 
+    function getPageContext() {
+        const context = {
+            url: window.location.href,
+            pageType: 'general',
+            articles: []
+        };
+
+        // Determine Page Type and Extract Data
+        if (window.location.pathname.startsWith('/details/')) {
+            context.pageType = 'article_details';
+            const title = document.querySelector('.details-container h1')?.innerText;
+            const summary = document.querySelector('.ai-box p')?.innerText;
+            const content = document.querySelector('.content div')?.innerText;
+            const risk = document.querySelector('.tag.risk-critical, .tag.risk-high, .tag.risk-medium, .tag.risk-low')?.innerText;
+            const sourceLink = document.querySelector('.meta a')?.href;
+
+            context.currentArticle = {
+                title, summary, content: content?.substring(0, 2000), risk, sourceLink
+            };
+        } else if (window.location.pathname === '/story-feed') {
+            context.pageType = 'listing';
+            document.querySelectorAll('.story-row').forEach(row => {
+                const titleLink = row.querySelector('.article-title');
+                if (titleLink) {
+                    context.articles.push({
+                        title: titleLink.innerText.trim(),
+                        localLink: titleLink.href
+                    });
+                }
+            });
+        } else if (window.location.pathname === '/' || window.location.pathname === '/index') {
+            context.pageType = 'dashboard';
+            document.querySelectorAll('.card').forEach(card => {
+                const titleLink = card.querySelector('h3 a');
+                if (titleLink) {
+                    context.articles.push({
+                        title: titleLink.innerText.trim(),
+                        localLink: titleLink.href
+                    });
+                }
+            });
+        }
+        return context;
+    }
+
     function copyChat(e) {
         e.stopPropagation();
         const text = chatBody.innerText;
@@ -135,10 +180,14 @@
         saveChat();
 
         try {
+            const context = getPageContext();
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: text })
+                body: JSON.stringify({ 
+                    query: text,
+                    context: context
+                })
             });
             const data = await res.json();
             let aiText = data.response || "Error getting response";
