@@ -114,10 +114,12 @@
     }
 
     function resetChat(e) {
-        e.stopPropagation();
+        if (e) e.stopPropagation();
         if (!confirm("Clear chat history?")) return;
         localStorage.removeItem('chatHistory');
         chatBody.innerHTML = '<div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>';
+        document.getElementById('chatInput').value = '';
+        saveChat(); // Sync back to localStorage
     }
 
     async function sendMessage() {

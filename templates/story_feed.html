@@ -156,28 +156,19 @@
         style="display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; background: rgba(26, 28, 44, 0.95); border-bottom: 1px solid #2d2f45;">
         <div style="display: flex; align-items: center; gap: 15px;">
             <i class="fas fa-shield-alt" style="font-size: 1.5em; color: #0a84ff;"></i>
-            <h1 style="margin: 0; font-size: 1.5em; font-weight: 600; color: #e2e8f0;">Intel Threat Reader</h1>
+            <h1 style="margin: 0; font-size: 1.5em; font-weight: 600; color: #e2e8f0;"><a href="{{ url_for('index') }}"
+                    style="color: inherit; text-decoration: none;">Intel Threat Reader</a></h1>
         </div>
-        <div>
-            <a href="/" class="icon-btn" style="text-decoration: none; margin-right: 15px;">Dashboard</a>
-            <a href="/story-feed" class="icon-btn"
-                style="text-decoration: none; background: #0a84ff; border-color: #0a84ff;">Intelligence Listing</a>
+        <div style="display: flex; gap: 20px;">
+            <a href="{{ url_for('index') }}" style="color: #ccc; text-decoration: none;">Dashboard</a>
+            <a href="{{ url_for('story_feed') }}"
+                style="color: var(--accent-color); text-decoration: none; font-weight: bold;">Listing</a>
+            <a href="{{ url_for('visuals_page') }}" style="color: #ccc; text-decoration: none;">Visuals</a>
         </div>
     </nav>
 
     <div class="feed-container">
 
-        <!-- Heatmap Generator -->
-        <div class="heatmap-section">
-            <h3 style="margin-top:0"><i class="fas fa-magic"></i> AI Heatmap Generator</h3>
-            <div class="heatmap-controls">
-                <input type="text" id="heatmapQuery" class="heatmap-input"
-                    placeholder="Ask a question about the data (e.g., 'Risk Level by Category' or 'Attacks per Source')..."
-                    value="Risk Level by Attack Category">
-                <button class="icon-btn" onclick="generateHeatmap()">Generate</button>
-            </div>
-            <div id="heatmapChart" style="min-height: 350px;"></div>
-        </div>
 
         <!-- Story Table -->
         <h2 style="margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px;">Latest Intelligence</h2>
@@ -210,7 +201,13 @@
                             <button class="icon-btn" onclick="addTag('{{ article.id }}')"
                                 style="padding: 0 4px; font-size: 0.7em;">+</button>
                         </div>
-                        <span class="article-summary">{{ article.ai_summary }}</span>
+                        <span class="article-summary">
+                            {% if article.analyzed %}
+                            {{ article.ai_summary }}
+                            {% else %}
+                            <i class="fas fa-spinner fa-spin" style="color:#0a84ff;"></i> Re-analyzing...
+                            {% endif %}
+                        </span>
                     </td>
                     <td>
                         <span class="pill" style="background:#2d2f45; color:#ccc;">{{ article.source }}</span>
@@ -233,7 +230,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze"><i
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}', this)" title="Re-Analyze"><i
                                 class="fas fa-sync-alt"></i></button>
                     </td>
                 </tr>
@@ -246,9 +243,10 @@
 
     {% include 'chat_scripts.html' %}
     <script>
-        async function reAnalyze(id) {
+        async function reAnalyze(id, btn) {
             if (!confirm("Re-analyze this article with AI?")) return;
-            const btn = event.currentTarget || event.target;
+            btn = btn || event.target.closest('button');
+            const originalContent = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
             try {
@@ -286,52 +284,6 @@
             window.location.reload();
         }
 
-        async function generateHeatmap() {
-            const query = document.getElementById('heatmapQuery').value;
-            const chartDiv = document.querySelector("#heatmapChart");
-            chartDiv.innerHTML = '<div style="text-align:center; padding:50px; color:#888;">Generating visualization... <i class="fas fa-spinner fa-spin"></i></div>';
-
-            try {
-                const res = await fetch('/api/heatmap', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
-                });
-                const data = await res.json();
-
-                if (data.error) {
-                    chartDiv.innerHTML = `<div style="color:red; text-align:center;">Error: ${data.error}</div>`;
-                    return;
-                }
-
-                // Render ApexChart
-                var options = {
-                    series: data.series,
-                    chart: {
-                        height: 350,
-                        type: 'heatmap',
-                        toolbar: { show: false },
-                        background: 'transparent'
-                    },
-                    dataLabels: { enabled: true },
-                    colors: ["#008FFB"],
-                    xaxis: { categories: data.x_categories, labels: { style: { colors: '#ccc' } } },
-                    yaxis: { labels: { style: { colors: '#ccc' } } },
-                    theme: { mode: 'dark' },
-                    title: { text: query, align: 'left', style: { color: '#fff' } }
-                };
-
-                chartDiv.innerHTML = "";
-                var chart = new ApexCharts(chartDiv, options);
-                chart.render();
-
-            } catch (e) {
-                chartDiv.innerHTML = `<div style="color:red;">Failed to generate heatmap.</div>`;
-            }
-        }
-
-        // Auto-generate on load
-        generateHeatmap();
     </script>
 </body>
 

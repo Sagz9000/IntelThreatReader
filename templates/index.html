@@ -11,18 +11,15 @@
 
 <body>
     <header>
-        <h1><i class="fas fa-shield-alt"></i> Intel Threat Reader</h1>
         <div
-            style="background: rgba(30,32,48,0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(10px);">
-            <div style="flex: 1;">
-                <h2 style="margin: 0 0 5px 0; font-size: 1.4em; color: #fff;"><i class="fas fa-list-ul"
-                        style="color: #0a84ff;"></i> Intelligence Listing</h2>
-                <p style="margin: 0; color: #8b9bb4; font-size: 0.95em;">Standardized tabular view of all analyzed
-                    threats with advanced sorting and AI visualizations.</p>
-            </div>
-            <a href="/story-feed" class="icon-btn"
-                style="text-decoration: none; background: linear-gradient(135deg, #0a84ff 0%, #0056b3 100%); border: none; padding: 12px 25px; border-radius: 8px; font-weight: 600; color: #fff; font-size: 1.1em; box-shadow: 0 4px 15px rgba(10, 132, 255, 0.3); transition: transform 0.2s;">View
-                Full Listing <i class="fas fa-arrow-right" style="margin-left: 10px;"></i></a>
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 10px 20px 20px 20px;">
+            <h1 style="margin:0;"><i class="fas fa-shield-alt"></i> Intel Threat Reader</h1>
+            <nav style="display: flex; gap: 20px;">
+                <a href="{{ url_for('index') }}"
+                    style="color: var(--accent-color); text-decoration: none; font-weight: bold;">Dashboard</a>
+                <a href="{{ url_for('story_feed') }}" style="color: #ccc; text-decoration: none;">Listing</a>
+                <a href="{{ url_for('visuals_page') }}" style="color: #ccc; text-decoration: none;">Visuals</a>
+            </nav>
         </div>
         <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; margin-bottom: 2rem;">
             <div id="queueStatus"
@@ -54,7 +51,8 @@
                     {% if article.analyzed %}
                     {{ article.ai_summary }}
                     {% else %}
-                    Analyzing...
+                    <span style="color:#0a84ff; font-style: italic;"><i class="fas fa-spinner fa-spin"></i> Analysis in
+                        progress...</span>
                     {% endif %}
                 </div>
                 <div class="tags">
@@ -62,7 +60,7 @@
                     <span class="tag risk-{{ article.ai_risk_level }}">{{ article.ai_risk_level }} Risk</span>
                     <span class="tag">{{ article.ai_category }}</span>
                     {% else %}
-                    <span class="tag">Pending AI</span>
+                    <span class="tag" style="background:#333; color:#aaa;">Pending</span>
                     {% endif %}
                     {% if article.source %}
                     <span class="tag source-tag"><i class="fas fa-rss"></i> {{ article.source }}</span>
@@ -80,8 +78,8 @@
                     <button class="icon-btn" onclick="addTag('{{ article.id }}')" style="padding: 0 4px;">+</button>
                     <div class="card-actions"
                         style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; padding-top: 10px; display: flex; justify-content: flex-end;">
-                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze with AI"><i
-                                class="fas fa-brain"></i></button>
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}', this)"
+                            title="Re-Analyze with AI"><i class="fas fa-brain"></i></button>
                     </div>
                 </div>
             </div>
@@ -115,8 +113,8 @@
                     <button class="icon-btn" onclick="addTag('{{ article.id }}')" style="padding: 0 4px;">+</button>
                     <div class="card-actions"
                         style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; padding-top: 10px; display: flex; justify-content: flex-end;">
-                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}')" title="Re-Analyze with AI"><i
-                                class="fas fa-brain"></i></button>
+                        <button class="icon-btn" onclick="reAnalyze('{{ article.id }}', this)"
+                            title="Re-Analyze with AI"><i class="fas fa-brain"></i></button>
                     </div>
                 </div>
             </div>
@@ -311,9 +309,11 @@
             navigator.clipboard.writeText(iocs).then(() => alert("IOCs copied to clipboard!"));
         }
 
-        async function reAnalyze(id) {
+        async function reAnalyze(id, btn) {
             if (!confirm("Re-analyze this article with AI?")) return;
-            const btn = event.currentTarget;
+            // Guard if btn not passed
+            btn = btn || event.target.closest('button');
+            const originalContent = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
             try {

@@ -268,7 +268,7 @@ def fetch_all_feeds():
     # Trigger analysis batch if we found new stuff
     if total_new > 0:
         logger.info("Triggering AI analysis for new articles...")
-        process_unprocessed_articles() # Process immediate batch
+        analyze_pending_articles() # Process immediate batch
         
     return total_new
 
@@ -278,9 +278,8 @@ def analyze_pending_articles():
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Process batch of 5 to speed up backlog
-    # Order by RANDOM() to ensure fairness across different feeds if one has many items
-    c.execute("SELECT id, title, content, link, media FROM articles WHERE analyzed = 0 ORDER BY RANDOM() LIMIT 5")
+    # Process batch of 2 to avoid overloading the AI service
+    c.execute("SELECT id, title, content, link, media FROM articles WHERE analyzed = 0 ORDER BY RANDOM() LIMIT 2")
     articles = c.fetchall()
     
     if not articles:
@@ -314,15 +313,13 @@ def analyze_pending_articles():
             
             # Format Prompt
             prompt = f"""You are a Cyber Threat Intelligence Analyst. 
-            Analyze the following security article and provide a structured JSON response.
+            Analyze this article and return a STRICT JSON object with these keys:
+            - summary: 2-sentence executive summary
+            - risk_level: (Critical, High, Medium, Low, Info)
+            - category: (Ransomware, Phishing, Vulnerability, Malware, Data Breach, Policy, Other)
             
             Article:
             {analysis_text} 
-            
-            Return ONLY valid JSON with these keys:
-            - summary: A 2-sentence executive summary.
-            - risk_level: One of [Critical, High, Medium, Low, Info].
-            - category: One of [Ransomware, Phishing, Vulnerability, Malware, Data Breach, Policy, Other].
             """
             
             # Call Multimodal LLM (limit to 1 image)
@@ -429,36 +426,6 @@ def analyze_article_ai(title, summary, full_content):
         logger.error(f"AI Analysis failed: {e}")
         return "Error", f"Error: {str(e)}", "Unknown"
 
-def process_unprocessed_articles():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM articles WHERE analyzed = 0 LIMIT 5") # Process batch of 5
-    articles = c.fetchall()
-    
-    count = 0
-    for article in articles:
-        logger.info(f"Analyzing article: {article['title']}")
-        category, ai_summary, risk = analyze_article_ai(article['title'], article['summary'], article['content'])
-        
-        # Index in ChromaDB for RAG if context exists
-        if article['content'] and vectorstore:
-            try:
-                vectorstore.add_texts(
-                    texts=[article['content']],
-                    metadatas=[{"id": article['id'], "title": article['title'], "category": category}],
-                    ids=[article['id']]
-                )
-                logger.info(f"Indexed article {article['id']} in vector store")
-            except Exception as e:
-                logger.error(f"Failed to index article in ChromaDB: {e}")
-
-        c.execute('''
-            UPDATE articles 
-            SET ai_category = ?, ai_summary = ?, ai_risk_level = ?, analyzed = 1
-            WHERE id = ?
-        ''', (category, ai_summary, risk, article['id']))
-        conn.commit()
-        count += 1
     
     conn.close()
     return count
@@ -591,8 +558,10 @@ def chat():
     
     if vectorstore:
         try:
-            # Perform similarity search
-            docs = vectorstore.similarity_search(query, k=3)
+            # Perform similarity search (case-insensitive for embeddings typically, but lowercasing helps normalization)
+            # We lowercase the query here to match standardized embeddings if they were trained that way, 
+            # or just for consistent intent.
+            docs = vectorstore.similarity_search(query.lower(), k=3)
             context_pieces = []
             for d in docs:
                 context_pieces.append(f"--- ARTICLE: {d.metadata.get('title')} ---\n{d.page_content}")
@@ -710,47 +679,58 @@ def story_feed():
     conn.close()
     return render_template('story_feed.html', articles=articles)
 
-@app.route('/api/heatmap', methods=['POST'])
-def generate_heatmap():
+@app.route('/visuals')
+def visuals_page():
+    return render_template('visuals.html')
+
+@app.route('/api/generate_chart', methods=['POST'])
+def generate_chart():
     data = request.json
-    query = data.get('query', 'Risk Level vs Category')
+    query = data.get('query', 'Bar chart of categories')
     
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT ai_category, ai_risk_level, source, published FROM articles WHERE analyzed = 1 LIMIT 100")
+    # Get a broad set of data for the AI to analyze
+    c.execute("SELECT ai_category, ai_risk_level, source, published, ai_summary FROM articles WHERE analyzed = 1 LIMIT 200")
     rows = [dict(row) for row in c.fetchall()]
     conn.close()
     
     if not rows:
         return jsonify({"error": "Not enough data"}), 400
 
-    # Prepare data summary for AI
-    data_summary = json.dumps(rows)
+    # Simplify data for context window
+    simple_data = []
+    for r in rows:
+        simple_data.append({
+            "category": r['ai_category'],
+            "risk": r['ai_risk_level'],
+            "source": r['source']
+        })
+    data_summary = json.dumps(simple_data)
     
     try:
-        # Ask AI to generate matrix
         client = ollama.Client(host=OLLAMA_BASE_URL)
         prompt = f"""
-        You are a data visualization assistant.
-        User Query: "{query}"
+        You are a Data Logic Expert for ApexCharts.
+        User Request: "{query}"
         
-        Raw Data (JSON):
+        Dataset (JSON):
         {data_summary}
         
-        Task: 
-        Generate a 2D matrix JSON for a heatmap based on the User Query and Data.
-        - X-Axis: Categories (or one dimension from query)
-        - Y-Axis: Risk Levels (or other dimension)
-        - Values: Count of articles in that intersection.
+        Task:
+        1. Analyze the dataset to calculate the counts/metrics requested.
+        2. Decide the best ApexCharts type: 'bar', 'pie', 'donut', 'line', 'area', 'heatmap'.
+        3. Construct the JSON configuration for ApexCharts options.
         
-        Return STRICT JSON format:
+        Rules:
+        - For 'pie'/'donut': "labels" are categories, "series" is array of numbers.
+        - For 'bar'/'line': "xaxis": {{ "categories": [...] }}, "series": [ {{ "name": "Metric", "data": [...] }} ]
+        - For 'heatmap': "series": [ {{ "name": "Y-Label", "data": [ {{ "x": "X-Label", "y": value }} ] }} ]
+        
+        Return JSON ONLY:
         {{
-            "x_categories": ["Cat1", "Cat2"],
-            "y_categories": ["Risk1", "Risk2"],
-            "series": [
-                {{ "name": "Risk1", "data": [10, 5] }}, 
-                {{ "name": "Risk2", "data": [2, 8] }}
-            ]
+            "message": "Brief comment on what is shown",
+            "chart_options": {{ ...valid ApexCharts options object... }}
         }}
         """
         
@@ -759,7 +739,7 @@ def generate_heatmap():
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Heatmap Gen Failed: {e}")
+        logger.error(f"Chart Gen Failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
