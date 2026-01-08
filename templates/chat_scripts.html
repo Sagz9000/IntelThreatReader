@@ -16,6 +16,14 @@
             chatBody.scrollTop = chatBody.scrollHeight;
         }
 
+        // Load structured history for AI context
+        const structHistory = localStorage.getItem('chatHistoryStructured');
+        if (structHistory) {
+            window.chatHistory = JSON.parse(structHistory);
+        } else {
+            window.chatHistory = [];
+        }
+
         if (minimized === 'true') {
             chatWidget.style.display = 'none';
             chatBubble.style.display = 'flex';
@@ -105,6 +113,7 @@
 
     function saveChat() {
         localStorage.setItem('chatHistory', chatBody.innerHTML);
+        localStorage.setItem('chatHistoryStructured', JSON.stringify(window.chatHistory || []));
     }
 
     function getPageContext() {
@@ -162,6 +171,8 @@
         if (e) e.stopPropagation();
         if (!confirm("Clear chat history?")) return;
         localStorage.removeItem('chatHistory');
+        localStorage.removeItem('chatHistoryStructured');
+        window.chatHistory = [];
         chatBody.innerHTML = '<div class="msg ai">Hello. I am your threat intelligence assistant. Ask me about the latest reports.</div>';
         document.getElementById('chatInput').value = '';
         saveChat(); // Sync back to localStorage
@@ -179,42 +190,56 @@
         body.scrollTop = body.scrollHeight;
         saveChat();
 
+        // Add User Msg to History
+        if (!window.chatHistory) window.chatHistory = [];
+        window.chatHistory.push({ role: 'user', content: text });
+
         try {
             const context = getPageContext();
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     query: text,
-                    context: context
+                    context: context,
+                    history: window.chatHistory.slice(-10) // Send last 10 messages
                 })
             });
             const data = await res.json();
             let aiText = data.response || "Error getting response";
 
-            // Check for IOC block
-            const iocRegex = /```json\s*({[\s\S]*"iocs"[\s\S]*})\s*```/;
-            const match = aiText.match(iocRegex);
+            // Check for IOC block (Non-greedy)
+            const iocRegex = /```json\s*({[\s\S]*?"iocs"[\s\S]*?})\s*```/g;
+            let match;
             let iocHtml = "";
 
-            if (match) {
+            while ((match = iocRegex.exec(aiText)) !== null) {
                 try {
                     const iocData = JSON.parse(match[1]);
-                    aiText = aiText.replace(iocRegex, ""); // Remove block from display
                     if (iocData.iocs && iocData.iocs.length > 0) {
                         const iocsStr = encodeURIComponent(iocData.iocs.join('\\n'));
-                        iocHtml = `<div style="margin-top:10px; padding:10px; background:#333; border-radius:5px;">
+                        iocHtml += `<div style="margin-top:10px; padding:10px; background:#2a2a2a; border-radius:8px; border-left:4px solid #4facfe;">
                                 <strong><i class="fas fa-bug"></i> Extracted IOCs</strong>
-                                <button onclick="exportIOCs('${iocsStr}')" style="float:right; background:#444; border:none; color:#fff; cursor:pointer;">Export</button>
-                                <ul style="margin:5px 0 0 20px; font-size:0.9em;">
+                                <button onclick="exportIOCs('${iocsStr}')" style="float:right; background:#444; border:none; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.8em; cursor:pointer;">Export</button>
+                                <ul style="margin:5px 0 0 20px; font-size:0.9em; color:#ddd;">
                                     ${iocData.iocs.map(i => `<li>${i}</li>`).join('')}
                                 </ul>
                             </div>`;
                     }
                 } catch (e) { console.error("IOC Parse error", e); }
             }
+            // Strip ALL json blocks from the displayed text for a cleaner look
+            aiText = aiText.replace(/```json\s*[\s\S]*?```/g, "").trim();
 
             body.innerHTML += `<div class="msg ai">${aiText}${iocHtml}</div>`;
+            window.chatHistory.push({ role: 'assistant', content: aiText });
+            if (window.chatHistory.length > 50) window.chatHistory.shift(); // Keep limit
+
+            // Handle UI Updates if a command was executed
+            if (data.command_executed) {
+                body.innerHTML += `<div class="msg ai" style="font-style:italic; font-size:0.85em; opacity:0.8;"><i class="fas fa-sync"></i> Refreshing page to reflect changes...</div>`;
+                setTimeout(() => window.location.reload(), 2000);
+            }
         } catch (e) {
             body.innerHTML += `<div class="msg ai">Connection Error</div>`;
         }

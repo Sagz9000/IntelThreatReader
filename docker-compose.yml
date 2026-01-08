@@ -7,11 +7,12 @@ services:
       - ./app.py:/app/app.py
       - ./templates:/app/templates
       - ./static:/app/static
-      - ./analysis_db.sqlite:/app/analysis_db.sqlite
+      - app_data:/app/data
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - DB_PATH=/app/data/analysis_db.sqlite
     depends_on:
       ollama:
         condition: service_healthy
@@ -48,3 +49,4 @@ services:
 volumes:
   ollama_models:
   chromadb_data:
+  app_data:

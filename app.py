@@ -21,6 +21,9 @@ import chromadb
 import requests # Added global import for requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
+import re
+import subprocess
+import tempfile
 
 # Configure logging
 logging.basicConfig(
@@ -41,11 +44,15 @@ def from_json_filter(s):
         return []
 
 # Constants
-DB_FILE = 'analysis_db.sqlite'
+DB_FILE = os.environ.get('DB_PATH', 'analysis_db.sqlite')
+# Ensure data directory exists if using volume path
+if '/' in DB_FILE:
+    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+    
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://ollama:11434')
 LLM_MODEL = "gemma3:4b"
-VISION_MODEL = "llama3.2-vision"
-EMBEDDING_MODEL = "nomic-embed-text-v2-moe" # Using better embedding model
+VISION_MODEL = "gemma3:4b"
+EMBEDDING_MODEL = "nomic-embed-text-v2-moe" 
 RSS_FEED_URL = "https://www.bleepingcomputer.com/feed/"
 
 # Globals
@@ -96,6 +103,12 @@ def init_db():
     except sqlite3.OperationalError:
         logger.info("Migrating DB: Adding source column")
         c.execute("ALTER TABLE articles ADD COLUMN source TEXT")
+    
+    try:
+        c.execute("SELECT tags FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        logger.info("Migrating DB: Adding tags column")
+        c.execute("ALTER TABLE articles ADD COLUMN tags TEXT")
         
     # Create Feeds table
     c.execute('''
@@ -562,6 +575,7 @@ def details(article_id):
 def chat():
     data = request.json
     query = data.get('query')
+    history = data.get('history', [])
     if not query:
         return jsonify({"error": "No query provided"}), 400
 
@@ -578,11 +592,13 @@ def chat():
         page_type = frontend_context.get('pageType')
         if page_type == 'article_details':
             art = frontend_context.get('currentArticle', {})
-            page_awareness = f"\n[USER IS CURRENTLY VIEWING THIS ARTICLE]:\nTitle: {art.get('title')}\nRisk: {art.get('risk')}\nSummary: {art.get('summary')}\nLink: {art.get('sourceLink')}\n"
+            page_awareness = f"\n[USER IS CURRENTLY VIEWING THIS ARTICLE]:\nTitle: {art.get('title')}\nRisk: {art.get('risk')}\nSummary: {art.get('summary')}\nLink: {art.get('sourceLink')}\nArticleID: {frontend_context.get('url', '').split('/')[-1].split('?')[0]}\n"
         elif page_type in ['dashboard', 'listing']:
             arts = frontend_context.get('articles', [])
-            titles = ", ".join([a.get('title') for a in arts[:10]])
-            page_awareness = f"\n[USER IS VIEWING A LIST OF ARTICLES INCLUDING]: {titles}\n"
+            art_list = "\n".join([f"- {a.get('title')} (Relative Link: {a.get('localLink')})" for a in arts[:15]])
+            page_awareness = f"\n[USER IS VIEWING A LIST OF ARTICLES]:\n{art_list}\n"
+    
+    logger.info(f"Chat Request: Query='{query}', HistoryCount={len(history)}, PageType='{frontend_context.get('pageType')}'")
 
     if vectorstore:
         try:
@@ -603,6 +619,7 @@ def chat():
                     conn_m.close()
                     
             context_str = "\n\n".join(context_pieces)
+            sources = [{"title": d.metadata.get('title'), "url": d.metadata.get('source')} for d in docs]
             logger.info(f"Chat: Retrieved {len(docs)} articles and {len(retrieved_media)} images for RAG")
         except Exception as e:
             logger.error(f"Chat: RAG search failed: {e}")
@@ -616,33 +633,48 @@ def chat():
         conn.close()
         context_str = "\n".join([f"- {a['title']}: {a['ai_summary']}" for a in articles])
     
+    # Format History
+    history_str = ""
+    # Only use recent history to avoid context overflow, but ensuring it's clearly labeled
+    recent_history = history[-10:] if len(history) > 10 else history
+    for h in recent_history:
+        role = "ANALYST" if h['role'] == 'assistant' else "USER"
+        history_str += f"{role}: {h['content']}\n"
+
     # Use Multimodal Model if images are available
     model_to_use = VISION_MODEL if retrieved_media else LLM_MODEL
     llm_vision = Ollama(model=model_to_use, base_url=OLLAMA_BASE_URL)
     
     try:
-        prompt_text = (
-            f"You are a Senior Cyber Threat Intelligence Analyst. You are professional, precise, and data-driven.\n"
-            f"Current Page Context: {page_awareness}\n\n"
-            f"Knowledge Base Context:\n{context_str}\n\n"
-            f"Question: {query}\n\n"
-            f"Instructions:\n"
-            f"1. Acknowledge the user's current view if relevant.\n"
-            f"2. ANALYTICAL RIGOR: For specific technical or threat-related queries, base all responses strictly on the provided 'Knowledge Base Context'. If the data contains statistics (e.g., volume, frequency, percentages), lead with these facts. For general conversation or greetings, respond naturally in your professional persona.\n"
-            f"3. STRUCTURE: Use Markdown headers (##) for 'Executive Summary', 'Statistical Analysis', and 'Recommendations' when providing intelligence reports.\n"
-            f"4. CITATION: Use bullet points for facts. Every claim must be supported by a data point from the context. Provide clickable Markdown links [Title](URL) for all referenced sources.\n"
-            f"5. NO HALLUCINATION: If a specific statistic or data point is missing, do not estimate. State that the data is unavailable.\n"
-            f"6. FORMATTING: Do NOT defang URLs from reputable news sources.\n"
-            f"7. IOC EXTRACTION: If IOCs (IPs, hashes, domains) are present, append a JSON block:\n"
-            f"```json\n{{\"iocs\": [\"ioc1\", \"ioc2\"]}}\n```\n"
-            f"Assistant:"
+        # Core Strategy and Persona (Top Level Instructions)
+        system_instructions = (
+            "You are a Senior Cyber Threat Intelligence Analyst. Your tone is professional, precise, and data-driven.\\n"
+            "Respond to general social interactions with professional politeness. For threat intel queries, respond with analytical rigor.\\n"
+            "Use Markdown headers (##) for reports. Use clickable [Title](URL) links for references.\\n\\n"
+            "CRITICAL TAG MANAGEMENT RULES:\\n"
+            "When the user asks to add, remove, or modify tags, you MUST output the JSON command block. Do NOT just say you did it.\\n"
+            "- To add a tag: Output ```json\\n{\\\"command\\\": \\\"add_tag\\\", \\\"article_id\\\": \\\"ACTUAL_ID\\\", \\\"tag\\\": \\\"TAG_NAME\\\"}\\n```\\n"
+            "- To remove a tag: Output ```json\\n{\\\"command\\\": \\\"remove_tag\\\", \\\"article_id\\\": \\\"ACTUAL_ID\\\", \\\"tag\\\": \\\"TAG_NAME\\\"}\\n```\\n"
+            "- To set all tags: Output ```json\\n{\\\"command\\\": \\\"set_tags\\\", \\\"article_id\\\": \\\"ACTUAL_ID\\\", \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\"]}\\n```\\n"
+            "Example: User says 'Add a tag: Malware'. You respond: 'I'll add that tag.' then output the JSON block.\\n\\n"
+            "For IOCs, append: ```json\\n{\\\"iocs\\\": [...]}\\n```\\n"
         )
         
+        # Assemble Final Prompt - Specific context at bottom for better focus
+        prompt_text = f"{system_instructions}\n"
+        if context_str:
+            prompt_text += f"\n[KNOWLEDGE BASE CONTEXT]:\n{context_str}\n"
+        if page_awareness:
+            prompt_text += f"\n[CURRENT PAGE CONTEXT]:\n{page_awareness}\n"
+        if history_str:
+            prompt_text += f"\n[CONVERSATION HISTORY]:\n{history_str}\n"
+            
+        prompt_text += f"\n[USER QUESTION]: {query}\n\nAssistant:"
+        
         if retrieved_media:
-            # Try to fetch and encode images for the vision model
             import base64
             images_b64 = []
-            for m_url in retrieved_media[:1]: # Limit to 1 image as model only supports one
+            for m_url in retrieved_media[:1]:
                 try:
                     img_resp = requests.get(m_url, timeout=5)
                     if img_resp.status_code == 200:
@@ -657,10 +689,86 @@ def chat():
         else:
             response = llm_vision.invoke(prompt_text)
             
-        return jsonify({"response": response})
+        logger.info(f"AI Response Snippet: {response[:100]}...")
+            
+        # Parse for Action Commands (More robust multi-block support)
+        command_executed = False
+        for match in re.finditer(r'```json\s*(\{[\s\S]*?\})\s*```', response):
+            try:
+                raw_json = match.group(1)
+                cmd_data = json.loads(raw_json)
+                cmd = cmd_data.get('command')
+                aid = cmd_data.get('article_id')
+                
+                if cmd in ['add_tag', 'remove_tag', 'set_tags'] and aid:
+                    logger.info(f"Processing tag command: {cmd} for article {aid}")
+                    conn_t = get_db_connection()
+                    try:
+                        res = conn_t.execute("SELECT user_tags FROM articles WHERE id = ?", (aid,)).fetchone()
+                        if res:
+                            current_tags = []
+                            try:
+                                if res['user_tags']:
+                                    current_tags = json.loads(res['user_tags'])
+                                    if not isinstance(current_tags, list): current_tags = []
+                            except:
+                                current_tags = [t.strip() for t in res['user_tags'].split(',')] if res['user_tags'] else []
+                            
+                            logger.info(f"Current tags for {aid}: {current_tags}")
+                            modified = False
+                            if cmd == 'add_tag':
+                                tag = cmd_data.get('tag')
+                                if tag and tag not in current_tags:
+                                    current_tags.append(tag)
+                                    modified = True
+                                    logger.info(f"Adding tag '{tag}' to {aid}")
+                            elif cmd == 'remove_tag':
+                                tag = cmd_data.get('tag')
+                                if tag:
+                                    # Case-insensitive and whitespace-tolerant matching
+                                    tag_lower = tag.strip().lower()
+                                    for existing_tag in current_tags:
+                                        if existing_tag.strip().lower() == tag_lower:
+                                            current_tags.remove(existing_tag)
+                                            modified = True
+                                            logger.info(f"Removing tag '{existing_tag}' from {aid}")
+                                            break
+                                    if not modified:
+                                        logger.warning(f"Tag '{tag}' not found in {current_tags} for removal")
+                            elif cmd == 'set_tags':
+                                new_tags = cmd_data.get('tags', [])
+                                if isinstance(new_tags, list):
+                                    current_tags = new_tags
+                                    modified = True
+                                    logger.info(f"Setting tags to {new_tags} for {aid}")
+                                    
+                            if modified:
+                                new_tags_json = json.dumps(current_tags)
+                                logger.info(f"Updating database with tags: {new_tags_json}")
+                                conn_t.execute("UPDATE articles SET user_tags = ? WHERE id = ?", (new_tags_json, aid))
+                                conn_t.commit()
+                                logger.info(f"Chat AI command '{cmd}' executed successfully for article {aid}")
+                                command_executed = True
+                            else:
+                                logger.info(f"No modification needed for {cmd}")
+                        else:
+                            logger.warning(f"Article {aid} not found in database")
+                    except Exception as tag_err:
+                        logger.error(f"Tag command error: {tag_err}", exc_info=True)
+                    finally:
+                        conn_t.close()
+            except Exception as ce:
+                logger.error(f"Chat Action Parsing Error: {ce}")
+            
+        return jsonify({
+            "response": response,
+            "sources": sources if docs else [],
+            "media": retrieved_media,
+            "command_executed": command_executed
+        })
     except Exception as e:
         logger.error(f"Chat completion failed: {e}")
-        return jsonify({"error": "AI processing timeout or error. Please try again."}), 500
+        return jsonify({"error": "AI processing timeout or error."}), 500
 
 # Init
 try:
@@ -752,53 +860,76 @@ def generate_chart():
     
     conn = get_db_connection()
     c = conn.cursor()
-    # Get a broad set of data for the AI to analyze
-    c.execute("SELECT ai_category, ai_risk_level, source, published, ai_summary FROM articles WHERE analyzed = 1 LIMIT 200")
+    # Limit to 100 for stability
+    c.execute("SELECT ai_category, ai_risk_level, source, published FROM articles WHERE analyzed = 1 LIMIT 100")
     rows = [dict(row) for row in c.fetchall()]
     conn.close()
     
     if not rows:
         return jsonify({"error": "Not enough data"}), 400
 
-    # Simplify data for context window
-    simple_data = []
-    for r in rows:
-        simple_data.append({
-            "category": r['ai_category'],
-            "risk": r['ai_risk_level'],
-            "source": r['source']
-        })
-    data_summary = json.dumps(simple_data)
+    data_summary = json.dumps(rows)
     
     try:
         client = ollama.Client(host=OLLAMA_BASE_URL)
         prompt = f"""
-        You are a Data Logic Expert for ApexCharts.
+        You are a Python Data Visualization Expert.
         User Request: "{query}"
         
         Dataset (JSON):
         {data_summary}
         
         Task:
-        1. Analyze the dataset to calculate the counts/metrics requested.
-        2. Decide the best ApexCharts type: 'bar', 'pie', 'donut', 'line', 'area', 'heatmap'.
-        3. Construct the JSON configuration for ApexCharts options.
+        Prepare a self-contained Python script to create a high-quality visualization.
         
         Rules:
-        - For 'pie'/'donut': "labels" are categories, "series" is array of numbers.
-        - For 'bar'/'line': "xaxis": {{ "categories": [...] }}, "series": [ {{ "name": "Metric", "data": [...] }} ]
-        - For 'heatmap': "series": [ {{ "name": "Y-Label", "data": [ {{ "x": "X-Label", "y": value }} ] }} ]
-        
-        Return JSON ONLY:
-        {{
-            "message": "Brief comment on what is shown",
-            "chart_options": {{ ...valid ApexCharts options object... }}
-        }}
+        1. Use matplotlib.pyplot or seaborn.
+        2. Define the data directly in the script based on the provided JSON.
+        3. Save the chart to 'static/charts/latest_visual.png' using plt.savefig('static/charts/latest_visual.png', bbox_inches='tight').
+        4. Use a dark theme if possible (plt.style.use('dark_background')).
+        5. DO NOT use plt.show().
+        6. Return ONLY the code block starting with ```python and ending with ```.
+        7. Ensure all imports (pandas, matplotlib, seaborn etc.) are included.
         """
         
-        response = client.chat(model=LLM_MODEL, messages=[{'role': 'user', 'content': prompt}], format='json')
-        result = json.loads(response['message']['content'])
-        return jsonify(result)
+        response = client.chat(model=LLM_MODEL, messages=[{'role': 'user', 'content': prompt}])
+        content = response['message']['content']
+        
+        # Extract code
+        code_match = re.search(r'```python\s*([\s\S]*?)\s*```', content)
+        if not code_match:
+            # Fallback to entire response if no backticks
+            code = content
+        else:
+            code = code_match.group(1)
+            
+        logger.info(f"Executing Viz Script:\n{code[:200]}...")
+        
+        # Ensure directory exists
+        path = os.path.join('static', 'charts')
+        if not os.path.exists(path):
+            os.makedirs(path)
+            
+        # Execute script
+        with tempfile.NamedTemporaryFile(suffix='.py', delete=False, mode='w', encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+            
+        try:
+            result = subprocess.run([sys.executable, temp_path], capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                logger.error(f"Viz Script Failed: {result.stderr}")
+                return jsonify({"error": "Visualization script failed to execute", "details": result.stderr}), 500
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+        # Return success with image URL
+        timestamp = int(time.time())
+        return jsonify({
+            "message": "Visualization generated successfully",
+            "image_url": f"/static/charts/latest_visual.png?t={timestamp}"
+        })
         
     except Exception as e:
         logger.error(f"Chart Gen Failed: {e}")

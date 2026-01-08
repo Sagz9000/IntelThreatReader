@@ -205,15 +205,8 @@
                 } else {
                     msgs.innerHTML += `<div class="bot-msg ai">${data.message || "Here is the visualization you requested."}</div>`;
 
-                    // Render Chart
-                    chartPanel.innerHTML = "";
-                    var options = data.chart_options;
-                    // Force theme
-                    options.theme = { mode: 'dark' };
-                    options.chart.background = 'transparent';
-
-                    var chart = new ApexCharts(chartPanel, options);
-                    chart.render();
+                    // Render Image
+                    chartPanel.innerHTML = `<img src="${data.image_url}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">`;
                 }
 
             } catch (e) {
