@@ -2,7 +2,7 @@
 
 **Intel Threat Reader** is an advanced cybersecurity threat intelligence platform designed for analysts and security leaders. It automates the collection, analysis, and visualization of global threat data using local Multimodal AI and Retrieval-Augmented Generation (RAG).
 
-![App Walkthrough](pictures/app_walkthrough.webp)
+
 
 ---
 
