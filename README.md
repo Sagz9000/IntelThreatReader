@@ -2,52 +2,84 @@
 
 **Intel Threat Reader** is an advanced cybersecurity threat intelligence platform designed for analysts and security leaders. It automates the collection, analysis, and visualization of global threat data using local Multimodal AI and Retrieval-Augmented Generation (RAG).
 
-
-
 ---
 
-## 🚀 Feature Walkthrough
+## 🚀 Detailed Feature Walkthrough
 
 ### 🏥 Central Intelligence Dashboard
 The primary hub for real-time monitoring and triage.
-- **Dynamic Risk Scoring**: AI automatically assigns risk levels (Critical, High, Medium, Low) based on article content.
-- **Queue Status**: Live monitoring of deep-analysis tasks with periodic updates and estimates.
-- **Triage Tags**: Analysts can add custom tags directly to cards for internal categorizing.
+- **Dynamic Risk Scoring**: AI automatically assigns risk levels (Critical, High, Medium, Low) based on article content, displayed prominently on each card.
+- **Categorized Intelligence**: Articles are grouped into standardized threat categories like *Ransomware*, *Phishing*, and *Vulnerability* for rapid focus.
+- **Real-time Queue**: Live monitoring of incoming threats. Use the **"Refresh Feeds"** button to trigger an immediate sync across all enabled RSS sources.
+- **Quick Links**: Each article card provides direct access to the original source and a deep-dive analysis page.
 
-![Dashboard](pictures/dashboard.png)
+![Dashboard](pictures/dashboard_granular.png)
 
-### 📊 Tactical Listing & Visualizations
-A tabular interface for deep data exploration and custom reporting.
-- **AI Data Analyst**: Ask questions in plain English (e.g., "Show me a pie chart of categories") to generate dynamic charts and heatmaps on the fly.
-- **Multi-Source Triage**: Quickly sort by source (BleepingComputer, The Hacker News, Krebs, etc.) or publication date.
+### 📊 Tactical Intelligence Listing
+A high-density tabular interface designed for deep data exploration and custom reporting.
+- **Unified Feed**: Access a full searchable list of all collected intelligence at `/story-feed`.
+- **Advanced Sorting**: Instantly sort threats by publication date, risk level, or source (e.g., BleepingComputer, Krebs on Security).
+- **Embedded Tags**: View user-applied triage tags directly in the table for quick context without opening individual reports.
 
-![Intelligence Listing](pictures/intelligence_listing.png)
+![Intelligence Listing](pictures/listing_detailed.png)
 
-### 🧐 Deep Article Analysis
-Go beyond the headline with automated content extraction.
-- **Full-Text Scraping**: Bypasses RSS limitations to pull entire article bodies and associated media.
-- **Executive Summaries**: AI-generated 2-sentence briefings for rapid absorption.
-- **Re-Scrape & Re-Analyze**: One-click buttons to force a fresh fetch from the source or a new AI evaluation.
+### 🧐 Deep Article Analysis & Triage
+Go beyond the headline with automated content extraction and AI-driven insights.
+- **Full-Text Scraping**: The engine bypasses standard RSS limits to pull the entire article body and associated media for analysis.
+- **Executive Summaries**: AI-generated 2-sentence briefings provide rapid absorption of complex technical details.
+- **Analytical Controls**:
+    - **Re-Scrape**: Force the system to fetch the latest version of the article from the original source.
+    - **Re-Analyze**: Trigger a fresh AI evaluation if new context or improved models are available.
 
-![Article Details](pictures/article_details.png)
+![Article Details](pictures/article_deep_dive.png)
 
 ### 🤖 Persistent AI Analyst (Multimodal RAG)
-A draggable, resizable chat interface that follows you across the platform.
-- **Senior Analyst Persona**: Interacts with the professional tone of a Senior CTI Analyst.
-- **Full Context Awareness**: The AI "sees" what you are looking at—summarizing the current page or specific visible articles.
-- **Verified Intelligence**: References its internal knowledge base (ChromaDB) to provide cited takeaways and defanged IOCs.
+A draggable, resizable chat interface that follows you across the platform, providing RAG-enabled intelligence on demand.
+- **Full Context Awareness**: The AI "sees" what you are currently viewing—whether it's the dashboard listing or a specific article deep dive.
+- **Trend Identification**: Ask questions like "Summarize the latest supply chain trends" to get a cited report based on the local knowledge base.
+- **Verified References**: The analyst provides clickable source links for every claim, ensuring data integrity.
 
-![AI Analyst Chat](pictures/chat_analyst.png)
+![AI Analyst Chat](pictures/chat_workflow.png)
+
+### 🏷️ Interactive Tagging Workflow
+Efficiently categorize threats through both manual and automated tagging.
+
+#### Manual Tagging
+Analysts can add custom metadata to any report with a single click.
+- Click the **"+ Add Tag"** button in the AI Analysis section.
+- Enter your custom tag name to instantly update the article's classification.
+
+![Manual Tagging](pictures/manual_tagging.png)
+
+#### AI-Managed Tagging
+Leverage the AI Analyst to manage classifications through natural language commands.
+- **Command Based**: Tell the analyst "Add a tag called 'Urgent' to this article."
+- **JSON Execution**: The AI generates a validated command block to update the database securely.
+- **Dynamic Updates**: The UI refreshes to reflect new tags, keeping your intelligence current.
+
+![AI Tagging](pictures/ai_tagging.png)
+
+#### Tagging Result
+Once applied, tags appear in the article header and are searchable across the platform.
+
+![Tagging Result](pictures/tagging_result.png)
+
+### 📡 Feed Management
+Take full control over your intelligence intake.
+- **Modular RSS Integration**: Add new cybersecurity news sources or delete legacy feeds.
+- **Active State Toggles**: Temporarily disable specific feeds without deleting them to focus on high-priority sources.
+
+![Feed Management](pictures/feed_mgmt_granular.png)
 
 ---
 
-## 🏗️ Architecture & RAG Logic
+## �️ System Architecture
 
 The platform is built on a high-concurrency local AI stack, ensuring that sensitive threat data never leaves your infrastructure.
 
 ### Technical Stack
 - **AI Engine**: [Ollama](https://ollama.com/) (Running `gemma3:4b` and `nomic-embed-text-v2-moe`)
-- **Backend**: Python 3.10+, Flask, LangChain, BeautifulSoup4
+- **Backend**: Python 3.10+, Flask, LangChain, APScheduler, BeautifulSoup4
 - **Storage**: SQLite (Metadata), ChromaDB (Vector Store)
 - **Frontend**: Vanilla HTML5/CSS3 (Glassmorphism), JavaScript
 
