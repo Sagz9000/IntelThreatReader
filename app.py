@@ -50,8 +50,8 @@ if '/' in DB_FILE:
     os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
     
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://ollama:11434')
-LLM_MODEL = "gemma3:4b"
-VISION_MODEL = "gemma3:4b"
+LLM_MODEL = "llama3.2-vision"
+VISION_MODEL = "llama3.2-vision"
 EMBEDDING_MODEL = "nomic-embed-text-v2-moe" 
 RSS_FEED_URL = "https://www.bleepingcomputer.com/feed/"
 
@@ -651,13 +651,23 @@ def chat():
             "You are a Senior Cyber Threat Intelligence Analyst. Your tone is professional, precise, and data-driven.\\n"
             "Respond to general social interactions with professional politeness. For threat intel queries, respond with analytical rigor.\\n"
             "Use Markdown headers (##) for reports. Use clickable [Title](URL) links for references.\\n\\n"
-            "CRITICAL TAG MANAGEMENT RULES:\\n"
-            "When the user asks to add, remove, or modify tags, you MUST output the JSON command block. Do NOT just say you did it.\\n"
-            "- To add a tag: Output ```json\\n{\\\"command\\\": \\\"add_tag\\\", \\\"article_id\\\": \\\"ACTUAL_ID\\\", \\\"tag\\\": \\\"TAG_NAME\\\"}\\n```\\n"
-            "- To remove a tag: Output ```json\\n{\\\"command\\\": \\\"remove_tag\\\", \\\"article_id\\\": \\\"ACTUAL_ID\\\", \\\"tag\\\": \\\"TAG_NAME\\\"}\\n```\\n"
-            "- To set all tags: Output ```json\\n{\\\"command\\\": \\\"set_tags\\\", \\\"article_id\\\": \\\"ACTUAL_ID\\\", \\\"tags\\\": [\\\"tag1\\\", \\\"tag2\\\"]}\\n```\\n"
-            "Example: User says 'Add a tag: Malware'. You respond: 'I'll add that tag.' then output the JSON block.\\n\\n"
-            "For IOCs, append: ```json\\n{\\\"iocs\\\": [...]}\\n```\\n"
+            "=== CRITICAL TAG MANAGEMENT RULES ===\\n"
+            "When the user asks to add, remove, or modify tags, you MUST ALWAYS output a JSON command block.\\n"
+            "Do NOT just say you did it - you must output the actual command.\\n\\n"
+            "COMMAND FORMATS (copy these exactly):\\n"
+            "1. Add tag to ONE article:\\n"
+            "   ```json\\n{\"command\": \"add_tag\", \"article_id\": \"ACTUAL_ID_HERE\", \"tag\": \"TAG_NAME\"}\\n```\\n\\n"
+            "2. Add tag to MULTIPLE articles:\\n"
+            "   ```json\\n{\"command\": \"bulk_add_tag\", \"article_ids\": [\"id1\", \"id2\", \"id3\"], \"tag\": \"TAG_NAME\"}\\n```\\n\\n"
+            "3. Remove tag from ONE article:\\n"
+            "   ```json\\n{\"command\": \"remove_tag\", \"article_id\": \"ACTUAL_ID_HERE\", \"tag\": \"TAG_NAME\"}\\n```\\n\\n"
+            "4. Remove tag from MULTIPLE articles:\\n"
+            "   ```json\\n{\"command\": \"bulk_remove_tag\", \"article_ids\": [\"id1\", \"id2\"], \"tag\": \"TAG_NAME\"}\\n```\\n\\n"
+            "EXAMPLE INTERACTION:\\n"
+            "User: 'Add tag Malware to the first article'\\n"
+            "You: 'I'll add that tag now.'\\n"
+            "```json\\n{\"command\": \"add_tag\", \"article_id\": \"abc123\", \"tag\": \"Malware\"}\\n```\\n\\n"
+            "For IOCs, append: ```json\\n{\"iocs\": [...]}\\n```\\n"
         )
         
         # Assemble Final Prompt - Specific context at bottom for better focus
@@ -755,6 +765,57 @@ def chat():
                             logger.warning(f"Article {aid} not found in database")
                     except Exception as tag_err:
                         logger.error(f"Tag command error: {tag_err}", exc_info=True)
+                    finally:
+                        conn_t.close()
+                
+                # Handle bulk tagging commands
+                elif cmd in ['bulk_add_tag', 'bulk_remove_tag']:
+                    article_ids = cmd_data.get('article_ids', [])
+                    tag = cmd_data.get('tag')
+                    
+                    if not article_ids or not tag:
+                        logger.warning(f"Bulk command {cmd} missing article_ids or tag")
+                        continue
+                    
+                    logger.info(f"Processing bulk command: {cmd} for {len(article_ids)} articles with tag '{tag}'")
+                    conn_t = get_db_connection()
+                    try:
+                        modified_count = 0
+                        for aid in article_ids:
+                            res = conn_t.execute("SELECT user_tags FROM articles WHERE id = ?", (aid,)).fetchone()
+                            if res:
+                                current_tags = []
+                                try:
+                                    if res['user_tags']:
+                                        current_tags = json.loads(res['user_tags'])
+                                        if not isinstance(current_tags, list): current_tags = []
+                                except:
+                                    current_tags = [t.strip() for t in res['user_tags'].split(',')] if res['user_tags'] else []
+                                
+                                modified = False
+                                if cmd == 'bulk_add_tag':
+                                    if tag not in current_tags:
+                                        current_tags.append(tag)
+                                        modified = True
+                                elif cmd == 'bulk_remove_tag':
+                                    tag_lower = tag.strip().lower()
+                                    for existing_tag in current_tags[:]:  # Create copy to iterate
+                                        if existing_tag.strip().lower() == tag_lower:
+                                            current_tags.remove(existing_tag)
+                                            modified = True
+                                            break
+                                
+                                if modified:
+                                    new_tags_json = json.dumps(current_tags)
+                                    conn_t.execute("UPDATE articles SET user_tags = ? WHERE id = ?", (new_tags_json, aid))
+                                    modified_count += 1
+                        
+                        conn_t.commit()
+                        logger.info(f"Bulk command '{cmd}' executed: modified {modified_count} articles")
+                        if modified_count > 0:
+                            command_executed = True
+                    except Exception as bulk_err:
+                        logger.error(f"Bulk tag command error: {bulk_err}", exc_info=True)
                     finally:
                         conn_t.close()
             except Exception as ce:

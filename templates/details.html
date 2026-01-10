@@ -87,6 +87,20 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Tag Input Modal -->
+    <div id="tagModal" class="tag-modal">
+        <div class="tag-modal-content">
+            <div class="tag-modal-header">Add Tag</div>
+            <input type="text" id="tagInput" class="tag-modal-input" placeholder="Enter tag name..." />
+            <div id="tagError" class="tag-error" style="display:none;"></div>
+            <div class="tag-modal-actions">
+                <button class="tag-modal-btn tag-modal-btn-secondary" onclick="closeTagModal()">Cancel</button>
+                <button class="tag-modal-btn tag-modal-btn-primary" onclick="submitTag()">Add Tag</button>
+            </div>
+        </div>
+    </div>
+
     {% include 'chat_widget.html' %}
     {% include 'chat_scripts.html' %}
 
@@ -154,28 +168,102 @@
             }
         }
 
-        async function addTag(articleId) {
-            const tag = prompt("Enter new tag:");
-            if (!tag) return;
+        // Tag Management
+        let currentArticleId = null;
 
-            await fetch(`/api/articles/${articleId}/tags`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag })
-            });
-            window.location.reload();
+        function addTag(articleId) {
+            currentArticleId = articleId;
+            const modal = document.getElementById('tagModal');
+            const input = document.getElementById('tagInput');
+            const error = document.getElementById('tagError');
+
+            input.value = '';
+            error.style.display = 'none';
+            modal.style.display = 'block';
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function closeTagModal() {
+            document.getElementById('tagModal').style.display = 'none';
+            currentArticleId = null;
+        }
+
+        async function submitTag() {
+            const input = document.getElementById('tagInput');
+            const error = document.getElementById('tagError');
+            const submitBtn = event.target;
+            const tag = input.value.trim();
+
+            if (!tag) {
+                error.textContent = 'Please enter a tag name';
+                error.style.display = 'block';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.classList.add('loading');
+            submitBtn.textContent = 'Adding...';
+            error.style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/articles/${currentArticleId}/tags`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag })
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                closeTagModal();
+                window.location.reload();
+            } catch (e) {
+                error.textContent = `Error adding tag: ${e.message}`;
+                error.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('loading');
+                submitBtn.textContent = 'Add Tag';
+            }
         }
 
         async function removeTag(articleId, tag) {
             if (!confirm(`Remove tag "${tag}"?`)) return;
 
-            await fetch(`/api/articles/${articleId}/tags`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag })
-            });
-            window.location.reload();
+            try {
+                const response = await fetch(`/api/articles/${articleId}/tags`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag })
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                window.location.reload();
+            } catch (e) {
+                alert(`Error removing tag: ${e.message}`);
+            }
         }
+
+        // Modal keyboard support
+        document.addEventListener('DOMContentLoaded', function () {
+            const tagInput = document.getElementById('tagInput');
+            const tagModal = document.getElementById('tagModal');
+
+            if (tagInput) {
+                tagInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') submitTag();
+                });
+            }
+
+            if (tagModal) {
+                tagModal.addEventListener('click', function (e) {
+                    if (e.target === tagModal) closeTagModal();
+                });
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && tagModal.style.display === 'block') {
+                    closeTagModal();
+                }
+            });
+        });
     </script>
 </body>
 
